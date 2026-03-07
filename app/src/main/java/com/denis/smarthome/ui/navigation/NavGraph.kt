@@ -18,13 +18,16 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.denis.smarthome.data.local.TokenManager
 import com.denis.smarthome.ui.screens.auth.LoginScreen
 import com.denis.smarthome.ui.screens.auth.RegisterScreen
+import com.denis.smarthome.ui.screens.control.DeviceControlRouter
 import com.denis.smarthome.ui.screens.devices.DevicesListScreen
 import com.denis.smarthome.ui.screens.home.HomeScreen
 import com.denis.smarthome.ui.screens.scenes.ScenesScreen
@@ -99,6 +102,13 @@ fun SmartHomeApp(tokenManager: TokenManager) {
                 }
                 composable(NavRoutes.Settings.route) {
                     SettingsScreen(navController = navController)
+                }
+                composable(
+                    route = NavRoutes.DeviceControl.route,
+                    arguments = listOf(navArgument("deviceId") { type = NavType.IntType })
+                ) { backStackEntry ->
+                    val deviceId = backStackEntry.arguments?.getInt("deviceId") ?: 0
+                    DeviceControlRouter(navController = navController, deviceId = deviceId)
                 }
             }
         }
