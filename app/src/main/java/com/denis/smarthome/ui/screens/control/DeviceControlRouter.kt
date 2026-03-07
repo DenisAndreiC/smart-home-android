@@ -17,19 +17,31 @@ import com.denis.smarthome.ui.theme.OnSurface
 import com.denis.smarthome.ui.theme.Primary
 import com.denis.smarthome.viewmodel.DeviceControlViewModel
 
-private fun isTvDevice(deviceType: String, name: String, irProtocol: String?): Boolean {
+private fun isTvDevice(type: String, name: String, irProtocol: String?): Boolean {
     val n = name.lowercase()
-    val t = deviceType.lowercase()
+    val t = type.lowercase()
     return t == "ir" && (n.contains("tv") || n.contains("television") ||
             irProtocol?.lowercase()?.contains("tv") == true)
 }
 
-private fun isAcDevice(deviceType: String, name: String, irProtocol: String?): Boolean {
+private fun isAcDevice(type: String, name: String, irProtocol: String?): Boolean {
     val n = name.lowercase()
-    val t = deviceType.lowercase()
+    val t = type.lowercase()
     return t == "ir" && (n.contains("ac") || n.contains("air") || n.contains("conditioner") ||
             irProtocol?.lowercase()?.contains("ac") == true ||
             irProtocol?.lowercase()?.contains("nec") == true)
+}
+
+private fun isRgbDevice(type: String, name: String): Boolean {
+    val n = name.lowercase()
+    val t = type.lowercase()
+    return t == "ir" && (n.contains("rgb") || n.contains("bulb") ||
+            (n.contains("light") && !n.contains("lamp")))
+}
+
+private fun isRelayDevice(type: String): Boolean {
+    val t = type.lowercase()
+    return t == "relay" || t == "wol"
 }
 
 @Composable
@@ -41,9 +53,9 @@ fun DeviceControlRouter(
     val viewModel: DeviceControlViewModel = viewModel(
         factory = DeviceControlViewModel.Factory(app, deviceId)
     )
-    val device by viewModel.device.collectAsState()
+    val device    by viewModel.device.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val error by viewModel.error.collectAsState()
+    val error     by viewModel.error.collectAsState()
 
     when {
         isLoading -> {
@@ -59,28 +71,20 @@ fun DeviceControlRouter(
         else -> {
             val d = device!!
             when {
-                isTvDevice(d.device_type, d.name, d.ir_protocol) -> {
-                    TvRemoteScreen(
-                        navController = navController,
-                        device = d,
-                        deviceId = deviceId
-                    )
-                }
-                isAcDevice(d.device_type, d.name, d.ir_protocol) -> {
-                    AcControlScreen(
-                        navController = navController,
-                        device = d,
-                        deviceId = deviceId
-                    )
-                }
-                else -> {
-                    // Generic relay/wol device — show simple toggle screen
-                    GenericDeviceScreen(
-                        navController = navController,
-                        device = d,
-                        deviceId = deviceId
-                    )
-                }
+                isTvDevice(d.device_type, d.name, d.ir_protocol) ->
+                    TvRemoteScreen(navController, d, deviceId)
+
+                isAcDevice(d.device_type, d.name, d.ir_protocol) ->
+                    AcControlScreen(navController, d, deviceId)
+
+                isRgbDevice(d.device_type, d.name) ->
+                    RgbBulbScreen(navController, d, deviceId)
+
+                isRelayDevice(d.device_type) ->
+                    LampControlScreen(navController, d, deviceId)
+
+                else ->
+                    GenericDeviceScreen(navController, d, deviceId)
             }
         }
     }
