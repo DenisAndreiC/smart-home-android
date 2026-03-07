@@ -1,265 +1,339 @@
 package com.denis.smarthome.ui.screens.home
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.denis.smarthome.ui.components.*
+import com.denis.smarthome.ui.navigation.NavRoutes
 import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.HomeViewModel
+import com.denis.smarthome.viewmodel.RoomInfo
 
-@OptIn(ExperimentalMaterial3Api::class)
+// Gradient palettes per room slot (cycling)
+private val roomGradients = listOf(
+    listOf(Color(0xFF0D3545), Background),  // teal-dark (Living)
+    listOf(Color(0xFF2A1535), Background),  // purple-dark (Bedroom)
+    listOf(Color(0xFF2A1F0D), Background),  // amber-dark (Kitchen)
+    listOf(Color(0xFF0D2A1A), Background),  // green-dark
+    listOf(Color(0xFF2A0D0D), Background),  // red-dark
+)
+
 @Composable
 fun HomeScreen(
     navController: NavController,
     viewModel: HomeViewModel = viewModel()
 ) {
     val stats by viewModel.stats.collectAsState()
-    val activity by viewModel.activity.collectAsState()
+    val rooms by viewModel.rooms.collectAsState()
     val user by viewModel.user.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    LazyColumn(
+    val greeting = viewModel.greeting
+    val currentDate = viewModel.currentDate
+    val userName = user?.name?.split(" ")?.firstOrNull() ?: ""
+
+    var activeChipIndex by remember { mutableStateOf(-1) }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background),
-        contentPadding = PaddingValues(bottom = 16.dp)
+            .background(Background)
     ) {
-        item {
-            // Header
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Surface)
-                    .padding(horizontal = 20.dp, vertical = 20.dp)
-            ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 88.dp)
+        ) {
+            // ── Greeting Header ──────────────────────────────────────────────
+            item {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Surface)
+                        .padding(horizontal = 20.dp, vertical = 18.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            text = "Hello, ${user?.name?.split(" ")?.firstOrNull() ?: "User"}",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = OnBackground,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Welcome back to SmartHome",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = OnSurface
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        IconButton(onClick = { viewModel.loadDashboard() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Primary)
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Avatar
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(48.dp)
                                 .clip(CircleShape)
-                                .background(PrimaryContainer),
+                                .background(SurfaceVariant),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Notifications, contentDescription = null, tint = Primary, modifier = Modifier.size(20.dp))
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = OnSurface,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = if (userName.isNotBlank()) "$greeting, $userName"
+                                       else greeting,
+                                color = OnBackground,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = currentDate,
+                                color = OnSurface,
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
+
+                    // Notification icon with badge
+                    Box {
+                        IconButton(onClick = { }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Notifications,
+                                contentDescription = "Notifications",
+                                tint = Primary
+                            )
+                        }
+                        // Badge
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(ErrorColor)
+                                .align(Alignment.TopEnd)
+                                .offset(x = (-10).dp, y = 10.dp)
+                        )
+                    }
+                }
+            }
+
+            // ── Stats ────────────────────────────────────────────────────────
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                SectionTitle(title = "Statistici")
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        StatCard(
+                            icon = Icons.Default.Devices,
+                            label = "Dispozitive",
+                            value = "${stats?.total_devices ?: 12}",
+                            change = "+2 adăugate"
+                        )
+                    }
+                    item {
+                        StatCard(
+                            icon = Icons.Default.Bolt,
+                            label = "Consum",
+                            value = "4.2 kWh",
+                            change = "+0.5% azi"
+                        )
+                    }
+                    item {
+                        StatCard(
+                            icon = Icons.Default.AutoAwesome,
+                            label = "Automatizări",
+                            value = "${stats?.total_commands_today ?: 5}",
+                            change = "active"
+                        )
+                    }
+                }
+            }
+
+            // ── Quick Actions ────────────────────────────────────────────────
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                SectionTitle(title = "Acțiuni Rapide")
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    item {
+                        QuickActionChip(
+                            label = "All Off",
+                            icon = Icons.Default.PowerSettingsNew,
+                            isActive = activeChipIndex == 0,
+                            onClick = {
+                                activeChipIndex = if (activeChipIndex == 0) -1 else 0
+                                Log.d("HomeScreen", "All Off triggered")
+                            }
+                        )
+                    }
+                    item {
+                        QuickActionChip(
+                            label = "Movie Mode",
+                            icon = Icons.Default.Movie,
+                            isActive = activeChipIndex == 1,
+                            onClick = {
+                                activeChipIndex = if (activeChipIndex == 1) -1 else 1
+                                Log.d("HomeScreen", "Movie Mode triggered")
+                            }
+                        )
+                    }
+                    item {
+                        QuickActionChip(
+                            label = "Good Night",
+                            icon = Icons.Default.DarkMode,
+                            isActive = activeChipIndex == 2,
+                            onClick = {
+                                activeChipIndex = if (activeChipIndex == 2) -1 else 2
+                                Log.d("HomeScreen", "Good Night triggered")
+                            }
+                        )
+                    }
+                    item {
+                        QuickActionChip(
+                            label = "Away",
+                            icon = Icons.Default.DirectionsRun,
+                            isActive = activeChipIndex == 3,
+                            onClick = {
+                                activeChipIndex = if (activeChipIndex == 3) -1 else 3
+                                Log.d("HomeScreen", "Away triggered")
+                            }
+                        )
+                    }
+                }
+            }
+
+            // ── Rooms ────────────────────────────────────────────────────────
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                SectionTitle(
+                    title = "Camere",
+                    action = {
+                        TextButton(onClick = {
+                            navController.navigate(NavRoutes.Devices.route)
+                        }) {
+                            Text("Toate", color = Primary, style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                )
+
+                // Loading indicator
+                if (isLoading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = Primary)
+                    }
+                } else {
+                    RoomsGrid(
+                        rooms = rooms,
+                        onRoomClick = { navController.navigate(NavRoutes.Devices.route) },
+                        onAddRoomClick = { Log.d("HomeScreen", "Add room clicked") }
+                    )
                 }
             }
         }
 
-        if (isLoading) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Primary)
-                }
-            }
-        } else {
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Dashboard",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = OnSurface,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 20.dp)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Stats row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    StatCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Devices,
-                        label = "Total",
-                        value = "${stats?.total_devices ?: 0}",
-                        subtitle = "Devices"
-                    )
-                    StatCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.CheckCircle,
-                        label = "Active",
-                        value = "${stats?.active_devices ?: 0}",
-                        subtitle = "Online",
-                        accentColor = Color(0xFF4CAF50)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    StatCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.FlashOn,
-                        label = "Today",
-                        value = "${stats?.total_commands_today ?: 0}",
-                        subtitle = "Commands"
-                    )
-                    StatCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Star,
-                        label = "Top device",
-                        value = stats?.most_used_device?.take(10) ?: "—",
-                        subtitle = "Most used"
-                    )
-                }
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(20.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Recent Activity",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = OnSurface,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    TextButton(onClick = { viewModel.loadDashboard() }) {
-                        Text("See all", color = Primary, style = MaterialTheme.typography.labelLarge)
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            if (activity.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.History, contentDescription = null, tint = OnSurface, modifier = Modifier.size(48.dp))
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("No recent activity", color = OnSurface, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-            } else {
-                items(activity) { item ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                        colors = CardDefaults.cardColors(containerColor = Surface),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(PrimaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.FlashOn, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(item.device_name, color = OnBackground, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                                Text(item.command_type, color = OnSurface, style = MaterialTheme.typography.bodySmall)
-                            }
-                            Text(
-                                text = item.created_at.take(10),
-                                color = OnSurface,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    }
-                }
-            }
+        // ── FAB ──────────────────────────────────────────────────────────────
+        FloatingActionButton(
+            onClick = { Log.d("HomeScreen", "FAB add device clicked") },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(24.dp),
+            containerColor = Primary,
+            contentColor = Color.Black,
+            shape = CircleShape
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "Add device")
         }
     }
 }
 
 @Composable
-private fun StatCard(
-    modifier: Modifier = Modifier,
-    icon: ImageVector,
-    label: String,
-    value: String,
-    subtitle: String,
-    accentColor: Color = Primary
+private fun RoomsGrid(
+    rooms: List<RoomInfo>,
+    onRoomClick: (String) -> Unit,
+    onAddRoomClick: () -> Unit
 ) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = Surface),
-        shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
+    // Show up to 3 rooms, then "Add" card — always 4 slots in 2×2 grid
+    val displayRooms = if (rooms.isEmpty()) {
+        listOf(
+            RoomInfo("Living Room", 3, 2),
+            RoomInfo("Bedroom", 2, 1),
+            RoomInfo("Kitchen", 1, 1)
+        )
+    } else rooms.take(3)
+
+    Column(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(accentColor.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(16.dp))
-                }
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(label, color = OnSurface, style = MaterialTheme.typography.labelSmall)
+        // Row 1
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (displayRooms.isNotEmpty()) {
+                RoomCard(
+                    name = displayRooms[0].name,
+                    activeCount = displayRooms[0].activeCount,
+                    deviceCount = displayRooms[0].deviceCount,
+                    gradientColors = roomGradients[0],
+                    onClick = { onRoomClick(displayRooms[0].name) },
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(value, color = OnBackground, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = OnSurface, style = MaterialTheme.typography.bodySmall)
+
+            if (displayRooms.size >= 2) {
+                RoomCard(
+                    name = displayRooms[1].name,
+                    activeCount = displayRooms[1].activeCount,
+                    deviceCount = displayRooms[1].deviceCount,
+                    gradientColors = roomGradients[1],
+                    onClick = { onRoomClick(displayRooms[1].name) },
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                AddRoomCard(
+                    onClick = onAddRoomClick,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        // Row 2
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (displayRooms.size >= 3) {
+                RoomCard(
+                    name = displayRooms[2].name,
+                    activeCount = displayRooms[2].activeCount,
+                    deviceCount = displayRooms[2].deviceCount,
+                    gradientColors = roomGradients[2],
+                    onClick = { onRoomClick(displayRooms[2].name) },
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+
+            AddRoomCard(
+                onClick = onAddRoomClick,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
+    Spacer(modifier = Modifier.height(8.dp))
 }
