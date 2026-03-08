@@ -1,3 +1,13 @@
+/**
+ * SectionTitle.kt - Componenta titlu de sectiune pentru ecranele aplicatiei
+ *
+ * Afiseaza un titlu formatat cu majuscule si spatiere extinsa intre litere,
+ * aliniat la stanga. Suporta optional un element actiune (ex: buton "Vezi tot")
+ * afisat la dreapta, prin intermediul unui slot composable.
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +24,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.denis.smarthome.ui.theme.OnSurface
 
+/**
+ * SectionTitle - Titlu stilizat pentru o sectiune de continut.
+ *
+ * Randeaza textul cu majuscule si letter-spacing marit pentru aspect vizual
+ * consistent cu designul dashboardului. Daca parametrul [action] este furnizat,
+ * acesta este afisat la capatul drept al randului (ex: link "Vezi tot").
+ *
+ * @param title Textul titlului care va fi transformat automat in majuscule
+ * @param modifier Modifier optional pentru personalizare externa
+ * @param action Composable optional afisat in dreapta titlului (ex: TextButton)
+ */
 @Composable
 fun SectionTitle(
     title: String,
@@ -27,6 +48,7 @@ fun SectionTitle(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Titlul este afisat cu majuscule si spatiere extinsa intre litere
         Text(
             text = title.uppercase(),
             style = MaterialTheme.typography.labelSmall,
@@ -34,6 +56,7 @@ fun SectionTitle(
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.5.sp
         )
+        // Slotul de actiune este invocat doar daca a fost furnizat
         action?.invoke()
     }
 }

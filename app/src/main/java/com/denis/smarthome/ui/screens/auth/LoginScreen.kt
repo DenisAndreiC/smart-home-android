@@ -1,3 +1,14 @@
+/**
+ * LoginScreen.kt - Ecranul de autentificare al aplicatiei SmartHome
+ *
+ * Afiseaza un formular cu camp email si parola, un buton de login si un link
+ * catre ecranul de inregistrare. Gestioneaza starea de incarcare si erorile
+ * provenite din AuthViewModel. Dupa autentificare reusita navigheaza automat
+ * catre ecranul principal.
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.screens.auth
 
 import androidx.compose.animation.AnimatedVisibility
@@ -32,6 +43,17 @@ import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.AuthState
 import com.denis.smarthome.viewmodel.AuthViewModel
 
+/**
+ * Ecranul de autentificare cu email si parola.
+ *
+ * Colecteaza [authState] din ViewModel folosind [collectAsState], iar
+ * un [LaunchedEffect] asculta schimbarile starii: cand ajunge [AuthState.Success],
+ * navigheaza la Home si curata stiva de navigare (popUpTo cu inclusive = true)
+ * pentru a preveni intoarcerea la Login cu butonul Back.
+ *
+ * @param navController Controlerul de navigare Compose
+ * @param authViewModel ViewModel-ul care gestioneaza logica de autentificare
+ */
 @Composable
 fun LoginScreen(
     navController: NavController,
@@ -41,10 +63,13 @@ fun LoginScreen(
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
 
+    // collectAsState transforma StateFlow din ViewModel intr-o valoare Compose reactiva
     val authState by authViewModel.authState.collectAsState()
     val isLoading = authState is AuthState.Loading
     val errorMessage = (authState as? AuthState.Error)?.message
 
+    // LaunchedEffect ruleaza un bloc suspend ori de cate ori se schimba authState.
+    // Cand login-ul reuseste, navigheaza la Home si elimina Login din stiva.
     LaunchedEffect(authState) {
         if (authState is AuthState.Success) {
             navController.navigate(NavRoutes.Home.route) {
@@ -73,7 +98,7 @@ fun LoginScreen(
                 .padding(top = 60.dp, bottom = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // App icon + name
+            // ── Header: logo circular cu iconita Home si numele aplicatiei ──
             Box(
                 modifier = Modifier
                     .size(72.dp)
@@ -113,7 +138,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // WiFi decoration card
+            // ── Card decorativ cu iconita Wifi ──
             Card(
                 modifier = Modifier
                     .size(100.dp)
@@ -136,7 +161,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Email field
+            // ── Formular: camp email cu tastatura de tip Email ──
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
@@ -163,7 +188,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Password field
+            // ── Formular: camp parola cu toggle vizibilitate ──
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
@@ -199,7 +224,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Forgot password
+            // ── Link pentru recuperare parola (UI only, fara logica) ──
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                 Text(
                     text = "Forgot password?",
@@ -211,7 +236,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Error message
+            // ── Mesaj de eroare animat (vizibil doar cand exista eroare) ──
             AnimatedVisibility(visible = errorMessage != null) {
                 errorMessage?.let {
                     Card(
@@ -233,7 +258,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Login button
+            // ── Butonul de Login: dezactivat in timpul incarcarii, afiseaza spinner ──
             Button(
                 onClick = { authViewModel.login(email, password) },
                 modifier = Modifier
@@ -268,7 +293,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Register link
+            // ── Link catre ecranul de inregistrare ──
             Row(horizontalArrangement = Arrangement.Center) {
                 Text(
                     text = "Don't have an account? ",
@@ -289,7 +314,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Divider with label
+            // ── Separator orizontal cu eticheta SECURE ACCESS ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -306,7 +331,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Biometric icons
+            // ── Iconite biometrice decorative (fingerprint + face ID, UI only) ──
             Row(
                 horizontalArrangement = Arrangement.spacedBy(24.dp),
                 verticalAlignment = Alignment.CenterVertically

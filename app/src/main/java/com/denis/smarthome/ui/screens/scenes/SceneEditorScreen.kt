@@ -1,3 +1,14 @@
+/**
+ * SceneEditorScreen.kt - Ecran pentru crearea si editarea scenelor de automatizare
+ *
+ * Permite utilizatorului sa introduca un nume, sa aleaga o iconita si sa adauge
+ * actiuni (perechi dispozitiv + comanda + delay) pentru o scena noua sau existenta.
+ * Dialogul AddActionDialog ghideaza utilizatorul pas cu pas: selectie dispozitiv,
+ * selectie comanda si setare intarziere optionala.
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.screens.scenes
 
 import androidx.compose.foundation.background

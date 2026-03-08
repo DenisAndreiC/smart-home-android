@@ -1,3 +1,13 @@
+/**
+ * DeviceListItem.kt - Componenta card pentru un dispozitiv in lista
+ *
+ * Afiseaza informatii despre un dispozitiv (nume, camera, status online/offline)
+ * impreuna cu o iconita selectata dinamic si un Switch M3 pentru pornire/oprire.
+ * Dot-ul colorat (verde/rosu) indica rapid starea activa sau inactiva.
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.components
 
 import androidx.compose.foundation.BorderStroke
@@ -21,6 +31,17 @@ import androidx.compose.ui.unit.sp
 import com.denis.smarthome.data.model.DeviceResponse
 import com.denis.smarthome.ui.theme.*
 
+/**
+ * Selecteaza iconita potrivita pentru un dispozitiv pe baza tipului si numelui.
+ *
+ * Verificarea se face in ordine: tipul exact (tv, ac), apoi cuvinte cheie din
+ * numele dispozitivului (light, bulb, lamp, fan, coffee). Daca nimic nu se
+ * potriveste, returneaza iconita generica [Icons.Default.Devices].
+ *
+ * @param deviceType Tipul dispozitivului din backend (ex: "relay", "ir")
+ * @param name Numele dispozitivului introdus de utilizator
+ * @return Iconita [ImageVector] corespunzatoare
+ */
 private fun deviceIcon(deviceType: String, name: String): ImageVector {
     val type = deviceType.lowercase()
     val nameLower = name.lowercase()
@@ -34,6 +55,17 @@ private fun deviceIcon(deviceType: String, name: String): ImageVector {
     }
 }
 
+/**
+ * Card pentru un dispozitiv din lista cu iconita, info si switch de control.
+ *
+ * Click-ul pe card navigheaza la ecranul de control al dispozitivului.
+ * Switch-ul M3 isi consuma propriul eveniment de click si nu il propaga la card.
+ *
+ * @param device Datele dispozitivului primite din API
+ * @param onToggle Callback apelat cand utilizatorul schimba starea switch-ului
+ * @param onClick Callback apelat la click pe intreaga linie (navigare la control)
+ * @param modifier Modifier optional pentru stilizare externa
+ */
 @Composable
 fun DeviceListItem(
     device: DeviceResponse,
@@ -54,7 +86,7 @@ fun DeviceListItem(
                 .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Device icon box
+            // Iconita dispozitivului selectata dinamic de deviceIcon()
             Box(
                 modifier = Modifier
                     .size(56.dp)
@@ -74,7 +106,7 @@ fun DeviceListItem(
 
             // Info
             Column(modifier = Modifier.weight(1f)) {
-                // Name + status dot
+                // Dot colorat: verde (#4CAF50) daca activ, rosu (ErrorColor) daca inactiv
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = device.name,
@@ -112,7 +144,7 @@ fun DeviceListItem(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Toggle switch — consumes its own click, won't propagate to parent
+            // Switch M3 pentru pornire/oprire; isi consuma propriul click, nu propaga la card
             Switch(
                 checked = device.is_active,
                 onCheckedChange = onToggle,

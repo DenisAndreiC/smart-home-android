@@ -1,3 +1,13 @@
+/**
+ * NavigationPad.kt - Pad directional tip D-Pad pentru telecomanda smart
+ *
+ * Implementeaza un control cruciform cu cinci butoane (Sus, Jos, Stanga, Dreapta, OK)
+ * dispuse intr-un Box de 220dp, util pentru navigarea in meniurile TV sau ale altor
+ * dispozitive controlate prin aplicatia SmartHome.
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.components
 
 import androidx.compose.foundation.background
@@ -18,6 +28,20 @@ import com.denis.smarthome.ui.theme.OnBackground
 import com.denis.smarthome.ui.theme.Primary
 import com.denis.smarthome.ui.theme.SurfaceVariant
 
+/**
+ * Pad directional cruciform cu butoane de navigare si buton central de confirmare.
+ *
+ * Cele patru directii (Sus, Jos, Stanga, Dreapta) sunt amplasate simetric in jurul
+ * butonului circular central "OK". Fiecare buton apeleaza callback-ul corespunzator
+ * la apasare, fara stare interna.
+ *
+ * @param onUp Callback apelat la apasarea directiei Sus.
+ * @param onDown Callback apelat la apasarea directiei Jos.
+ * @param onLeft Callback apelat la apasarea directiei Stanga.
+ * @param onRight Callback apelat la apasarea directiei Dreapta.
+ * @param onCenter Callback apelat la apasarea butonului central OK.
+ * @param modifier Modifier optional pentru personalizare externa.
+ */
 @Composable
 fun NavigationPad(
     onUp: () -> Unit,
@@ -31,7 +55,7 @@ fun NavigationPad(
         modifier = modifier.size(220.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Center OK button
+        // Butonul circular central "OK" — confirmare/selectie in meniu
         Box(
             modifier = Modifier
                 .size(64.dp)
@@ -48,7 +72,7 @@ fun NavigationPad(
             )
         }
 
-        // Up
+        // Butonul Sus — colturi rotunjite doar in partea de sus pentru aspect cruciform
         Box(
             modifier = Modifier
                 .size(52.dp)
@@ -61,7 +85,7 @@ fun NavigationPad(
             Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Up", tint = OnBackground)
         }
 
-        // Down
+        // Butonul Jos — colturi rotunjite doar in partea de jos
         Box(
             modifier = Modifier
                 .size(52.dp)
@@ -74,7 +98,7 @@ fun NavigationPad(
             Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Down", tint = OnBackground)
         }
 
-        // Left
+        // Butonul Stanga — colturi rotunjite pe latura stanga
         Box(
             modifier = Modifier
                 .size(52.dp)
@@ -87,7 +111,7 @@ fun NavigationPad(
             Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Left", tint = OnBackground)
         }
 
-        // Right
+        // Butonul Dreapta — colturi rotunjite pe latura dreapta
         Box(
             modifier = Modifier
                 .size(52.dp)

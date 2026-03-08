@@ -1,3 +1,12 @@
+/**
+ * StatCard.kt - Card de statistici pentru dashboard-ul SmartHome
+ *
+ * Afiseaza o statistica simpla cu iconita, eticheta, valoare numerica si
+ * un text de modificare/trend. Folosit in LazyRow pe ecranul HomeScreen.
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.components
 
 import androidx.compose.foundation.BorderStroke
@@ -19,6 +28,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.denis.smarthome.ui.theme.*
 
+/**
+ * Card de statistici cu iconita si valoare numerica.
+ *
+ * @param icon Iconita [ImageVector] afisata in cercul teal din colt
+ * @param label Eticheta descriptiva a statisticii (ex: "Dispozitive")
+ * @param value Valoarea principala afisata mare (ex: "12")
+ * @param change Text secundar care indica trendul (ex: "+2 adaugate")
+ * @param modifier Modifier optional pentru stilizare externa
+ */
 @Composable
 fun StatCard(
     icon: ImageVector,
@@ -34,6 +52,7 @@ fun StatCard(
         border = BorderStroke(1.dp, Outline)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
+            // Cerc colorat PrimaryContainer cu iconita teal in centru
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -49,12 +68,14 @@ fun StatCard(
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
+            // Eticheta descriptiva in culoare secundara (OnSurface)
             Text(
                 text = label,
                 color = OnSurface,
                 style = MaterialTheme.typography.bodySmall
             )
             Spacer(modifier = Modifier.height(4.dp))
+            // Valoarea principala afisata cu font mare si bold
             Text(
                 text = value,
                 color = OnBackground,
@@ -62,6 +83,7 @@ fun StatCard(
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(4.dp))
+            // Textul de trend/schimbare afisat in culoarea Primary (teal)
             Text(
                 text = change,
                 color = Primary,

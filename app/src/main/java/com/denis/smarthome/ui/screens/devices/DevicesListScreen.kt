@@ -1,3 +1,13 @@
+/**
+ * DevicesListScreen.kt - Ecranul de lista a dispozitivelor SmartHome
+ *
+ * Afiseaza toate dispozitivele cu filtrare dupa tip (All, By Room, IR, Relay).
+ * Permite adaugarea unui dispozitiv nou prin dialog cu ExposedDropdownMenuBox
+ * pentru selectarea tipului. Suporta pull-to-refresh si stare goala cu call-to-action.
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.screens.devices
 
 import androidx.compose.foundation.background
@@ -29,6 +39,15 @@ import com.denis.smarthome.viewmodel.AddDeviceFormState
 import com.denis.smarthome.viewmodel.DeviceFilter
 import com.denis.smarthome.viewmodel.DevicesViewModel
 
+/**
+ * Ecranul principal de gestiune a dispozitivelor.
+ *
+ * Colecteaza starea din [DevicesViewModel] si afiseaza lista filtrata.
+ * Erorile sunt afisate printr-un [SnackbarHost] folosind [LaunchedEffect].
+ *
+ * @param navController Controlerul de navigare Compose
+ * @param viewModel ViewModel-ul care gestioneaza lista si filtrele dispozitivelor
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DevicesListScreen(
@@ -46,7 +65,7 @@ fun DevicesListScreen(
 
     var showRoomDropdown by remember { mutableStateOf(false) }
 
-    // Error snackbar
+    // LaunchedEffect asculta eroarea: cand apare una, o afiseaza in Snackbar si o sterge din VM
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(error) {
         error?.let {
@@ -65,7 +84,7 @@ fun DevicesListScreen(
                 .padding(innerPadding)
                 .background(Background)
         ) {
-            // ── Top Bar ──────────────────────────────────────────────────────
+            // ── Top Bar: titlu, numarul de dispozitive active si buton de adaugare ──
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -111,7 +130,8 @@ fun DevicesListScreen(
                 }
             }
 
-            // ── Filter Chips ─────────────────────────────────────────────────
+            // ── Filtre chip-uri: LazyRow cu SmartFilterChip pentru All, By Room, IR, Relay ──
+            // Chipul "By Room" deschide un DropdownMenu cu lista camerelor disponibile
             LazyRow(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -180,7 +200,8 @@ fun DevicesListScreen(
                 }
             }
 
-            // ── Device List ──────────────────────────────────────────────────
+            // ── Lista dispozitive cu PullToRefreshBox ──
+            // Afiseaza: indicator de incarcare / stare goala cu CTA / lista cu DeviceListItem
             @OptIn(ExperimentalMaterial3Api::class)
             PullToRefreshBox(
                 isRefreshing = isLoading,
@@ -225,7 +246,7 @@ fun DevicesListScreen(
         }
     }
 
-    // ── Add Device Dialog ────────────────────────────────────────────────────
+    // ── Dialog de adaugare dispozitiv: afisata conditionat din showAddDialog ──
     if (showAddDialog) {
         AddDeviceDialog(
             form = addForm,
@@ -237,6 +258,19 @@ fun DevicesListScreen(
     }
 }
 
+/**
+ * Dialog pentru adaugarea unui dispozitiv nou.
+ *
+ * Foloseste [ExposedDropdownMenuBox] din Material3 pentru selectarea tipului
+ * de dispozitiv (relay / ir / wol) dintr-o lista predefinita. Campul este
+ * read-only si se deschide prin interactiunea cu ExposedDropdownMenuDefaults.TrailingIcon.
+ *
+ * @param form Starea curenta a formularului de adaugare
+ * @param rooms Lista camerelor disponibile pentru placeholder
+ * @param onFormChange Callback apelat la orice modificare a formularului
+ * @param onConfirm Callback apelat la apasarea butonului de confirmare
+ * @param onDismiss Callback apelat la inchiderea dialogului
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddDeviceDialog(
@@ -247,6 +281,7 @@ private fun AddDeviceDialog(
     onDismiss: () -> Unit
 ) {
     var typeExpanded by remember { mutableStateOf(false) }
+    // Tipurile de dispozitive suportate de backend
     val deviceTypes = listOf("relay", "ir", "wol")
 
     AlertDialog(
@@ -282,7 +317,8 @@ private fun AddDeviceDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Device Type dropdown
+                // ExposedDropdownMenuBox afiseaza un camp read-only cu meniu expandabil
+                // pentru selectarea tipului dispozitivului (relay / ir / wol)
                 ExposedDropdownMenuBox(
                     expanded = typeExpanded,
                     onExpandedChange = { typeExpanded = it }

@@ -1,3 +1,13 @@
+/**
+ * RemoteButton.kt - Butoane reutilizabile pentru interfata de telecomanda
+ *
+ * Defineste doua componente Composable: RemoteButton (buton patrat cu icona sau eticheta)
+ * si RemoteTextButton (buton dreptunghiular cu text), folosite in ecranele de control
+ * al dispozitivelor smart (TV, AC etc.).
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.components
 
 import androidx.compose.foundation.background
@@ -20,6 +30,21 @@ import com.denis.smarthome.ui.theme.OnBackground
 import com.denis.smarthome.ui.theme.OnSurface
 import com.denis.smarthome.ui.theme.SurfaceVariant
 
+/**
+ * Buton patrat pentru telecomanda, cu suport pentru icona sau text scurt.
+ *
+ * Afiseaza fie o icona vectoriala, fie o eticheta text in centrul unui Box
+ * cu colturi rotunjite si culoare de fundal configurabila.
+ *
+ * @param onClick Callback apelat la apasarea butonului.
+ * @param modifier Modifier optional pentru personalizare externa.
+ * @param icon Icona vectoriala afisata in centru (prioritara fata de label).
+ * @param label Text afisat daca nu este furnizata o icona.
+ * @param backgroundColor Culoarea de fundal a butonului.
+ * @param iconTint Culoarea aplicata iconei sau textului.
+ * @param size Dimensiunea laturii butonului patrat.
+ * @param cornerRadius Raza colturilor rotunjite.
+ */
 @Composable
 fun RemoteButton(
     onClick: () -> Unit,
@@ -39,6 +64,7 @@ fun RemoteButton(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
+        // Daca exista icona, o afisam; altfel afisam eticheta text
         if (icon != null) {
             Icon(
                 imageVector = icon,
@@ -57,6 +83,18 @@ fun RemoteButton(
     }
 }
 
+/**
+ * Buton dreptunghiular cu eticheta text, folosit in randurile de control ale telecomenzii.
+ *
+ * Are o inaltime fixa de 44dp si colturi rotunjite, potrivit pentru butoane
+ * functionale precum "Sursa", "Meniu" sau alte comenzi textuale.
+ *
+ * @param label Textul afisat pe buton.
+ * @param onClick Callback apelat la apasarea butonului.
+ * @param modifier Modifier optional pentru personalizare externa.
+ * @param backgroundColor Culoarea de fundal.
+ * @param textColor Culoarea textului.
+ */
 @Composable
 fun RemoteTextButton(
     label: String,

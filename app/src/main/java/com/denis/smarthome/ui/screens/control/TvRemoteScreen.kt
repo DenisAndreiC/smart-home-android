@@ -1,3 +1,13 @@
+/**
+ * TvRemoteScreen.kt - Ecran telecomanda virtuala pentru televizor
+ *
+ * Ofera o interfata de tip telecomanda cu butoane de volum, canale, navigare
+ * directional, meniu si un buton de power cu design rosu. Fiecare buton apeleaza
+ * viewModel.sendCommand("...") care face POST /commands/send catre backend.
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.screens.control
 
 import android.app.Application
@@ -28,6 +38,15 @@ import com.denis.smarthome.ui.components.*
 import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.TvRemoteViewModel
 
+/**
+ * Ecranul principal al telecomenzii virtuale pentru TV.
+ * Colecteaza starea isOn si isMuted din TvRemoteViewModel si afiseaza
+ * o interfata scrollabila cu toate controalele telecomenzii.
+ *
+ * @param navController pentru butonul de intoarcere din top bar
+ * @param device obiectul DeviceResponse cu numele si camera dispozitivului
+ * @param deviceId ID-ul dispozitivului folosit la initializarea ViewModel-ului
+ */
 @Composable
 fun TvRemoteScreen(
     navController: NavController,
@@ -58,6 +77,8 @@ fun TvRemoteScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             // ── Top Bar ──────────────────────────────────────────────────────
+            // Bara superioara: buton Back (stanga), nume + camera (centru),
+            // indicator status colorat (verde=ON, rosu=OFF) in dreapta
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -83,6 +104,7 @@ fun TvRemoteScreen(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
+                // Punct colorat: verde cand TV-ul e pornit, rosu cand e oprit
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
@@ -101,6 +123,8 @@ fun TvRemoteScreen(
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 // ── Power Button ─────────────────────────────────────────────
+                // Buton circular cu fond rosu inchis (#2A1A1A), border rosu inchis (#8B0000)
+                // si iconita rosie aprinsa (#FF3333). Trimite comanda "power" la apasare.
                 Box(
                     modifier = Modifier
                         .size(80.dp)
@@ -119,11 +143,13 @@ fun TvRemoteScreen(
                 }
 
                 // ── VOL / CH row ─────────────────────────────────────────────
+                // Rand cu trei coloane: VOL (stanga), NavigationPad (centru), CH (dreapta)
+                // Fiecare buton apeleaza viewModel.sendCommand() cu comanda corespunzatoare
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    // Volume column
+                    // Coloana volum: buton crestere, buton mute (icon se schimba), buton scadere
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -147,7 +173,7 @@ fun TvRemoteScreen(
                         )
                     }
 
-                    // Navigation pad
+                    // NavigationPad: componentul cu 5 butoane directionale (sus/jos/stanga/dreapta/ok)
                     NavigationPad(
                         onUp = { viewModel.sendCommand("up") },
                         onDown = { viewModel.sendCommand("down") },
@@ -156,7 +182,7 @@ fun TvRemoteScreen(
                         onCenter = { viewModel.sendCommand("ok") }
                     )
 
-                    // Channel column
+                    // Coloana canale: buton canal urmator, buton sursa de intrare, buton canal anterior
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -181,6 +207,7 @@ fun TvRemoteScreen(
                 }
 
                 // ── MENU / BACK / HOME row ────────────────────────────────────
+                // Rand cu trei butoane dreptunghiulare pentru navigarea in meniurile TV
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
@@ -206,6 +233,7 @@ fun TvRemoteScreen(
                 }
 
                 // ── Learn New Button ──────────────────────────────────────────
+                // Buton pentru invatarea de noi comenzi IR (functionalitate viitoare)
                 HorizontalDivider(color = Outline, modifier = Modifier.padding(vertical = 4.dp))
                 Button(
                     onClick = { },

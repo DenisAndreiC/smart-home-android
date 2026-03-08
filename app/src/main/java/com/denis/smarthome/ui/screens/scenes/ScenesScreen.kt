@@ -1,3 +1,13 @@
+/**
+ * ScenesScreen.kt - Ecran pentru gestionarea scenelor de automatizare smart home
+ *
+ * Afiseaza o grila de scene disponibile, fiecare putand fi executata sau stearsa.
+ * Include logica de vizualizare dinamica (icon si culori) in functie de numele scenei.
+ * Navigheaza catre SceneEditorScreen pentru crearea de scene noi.
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.screens.scenes
 
 import androidx.compose.animation.AnimatedVisibility
@@ -29,8 +39,20 @@ import com.denis.smarthome.ui.navigation.NavRoutes
 import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.ScenesViewModel
 
+/**
+ * Date holder pentru iconita, culoarea iconitei si culoarea de fundal ale unei scene.
+ * Utilizat intern de functia sceneVisuals() pentru a determina aspectul cardului.
+ */
 private data class SceneVisuals(val icon: ImageVector, val iconTint: Color, val bgColor: Color)
 
+/**
+ * Returneaza un obiect SceneVisuals corespunzator numelui scenei.
+ * Detecteaza cuvinte cheie (movie, morning, sleep etc.) si atribuie
+ * iconita si culorile potrivite contextului scenei.
+ *
+ * @param name numele scenei, folosit pentru detectia cuvintelor cheie
+ * @param iconStr campul icon optional din raspunsul API (neutilizat momentan)
+ */
 private fun sceneVisuals(name: String, iconStr: String?): SceneVisuals {
     val n = name.lowercase()
     return when {
@@ -51,6 +73,14 @@ private fun sceneVisuals(name: String, iconStr: String?): SceneVisuals {
     }
 }
 
+/**
+ * Ecranul principal al sectiunii Scene.
+ * Afiseaza o grila de carduri cu scene, permite executarea si stergerea lor.
+ * Un buton flotant (FAB) navigheaza catre editorul de scene pentru creare noua.
+ *
+ * @param navController controllerul de navigare Compose
+ * @param viewModel ScenesViewModel furnizat prin injectare Compose
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScenesScreen(
@@ -64,16 +94,19 @@ fun ScenesScreen(
     val executingId     by viewModel.executingSceneId.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
+    // sceneToDelete retine scena selectata pentru confirmare inainte de stergere
     var sceneToDelete by remember { mutableStateOf<SceneResponse?>(null) }
 
+    // Afiseaza eroarea in snackbar si reseteaza starea din ViewModel
     LaunchedEffect(error) {
         error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
     }
+    // Afiseaza mesajul de confirmare executie in snackbar
     LaunchedEffect(executeMessage) {
         executeMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearMessage() }
     }
 
-    // Delete confirmation dialog
+    // Dialog de confirmare stergere scena — apare doar cand sceneToDelete != null
     sceneToDelete?.let { scene ->
         AlertDialog(
             onDismissRequest = { sceneToDelete = null },
@@ -94,6 +127,7 @@ fun ScenesScreen(
     Scaffold(
         containerColor = Background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        // FAB pentru navigare catre editorul de scene (creare noua)
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { navController.navigate(NavRoutes.SceneEditor.createRoute()) },
@@ -139,7 +173,7 @@ fun ScenesScreen(
                 }
             }
 
-            // ── Content ───────────────────────────────────────────────────────
+            // ── Continut principal: loading / lista goala / grila de scene ────
             when {
                 isLoading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -173,6 +207,7 @@ fun ScenesScreen(
                     }
                 }
                 else -> {
+                    // Grila 2 coloane cu carduri de scene
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
                         contentPadding = PaddingValues(16.dp),
@@ -185,7 +220,8 @@ fun ScenesScreen(
                                 scene = scene,
                                 isExecuting = executingId == scene.id,
                                 onExecute = { viewModel.executeScene(scene.id) },
-                                onDelete = { sceneToDelete = scene }
+                                onDelete = { sceneToDelete = scene },
+                                onEdit = { navController.navigate(NavRoutes.SceneEditor.createRoute(scene.id)) }
                             )
                         }
                     }
@@ -195,15 +231,28 @@ fun ScenesScreen(
     }
 }
 
+/**
+ * Card compozabil pentru o singura scena din grila.
+ * Afiseaza iconita, numele, numarul de actiuni si un buton de activare.
+ * Include un meniu contextual (MoreVert) cu optiunile Edit si Delete.
+ *
+ * @param scene datele scenei (id, name, actions, icon)
+ * @param isExecuting true daca scena este in curs de executie (schimba aspectul butonului)
+ * @param onExecute callback apelat la apasarea butonului Activate
+ * @param onDelete callback apelat la selectarea optiunii Delete din meniu
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SceneCard(
     scene: SceneResponse,
     isExecuting: Boolean,
     onExecute: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onEdit: () -> Unit
 ) {
+    // Determina iconita si culorile cardului pe baza numelui scenei
     val visuals = sceneVisuals(scene.name, scene.icon)
+    // Controleaza vizibilitatea meniului dropdown (MoreVert)
     var showMenu by remember { mutableStateOf(false) }
 
     Card(
@@ -244,7 +293,7 @@ private fun SceneCard(
                     ) {
                         DropdownMenuItem(
                             text = { Text("Edit", color = OnBackground) },
-                            onClick = { showMenu = false }
+                            onClick = { showMenu = false; onEdit() }
                         )
                         DropdownMenuItem(
                             text = { Text("Delete", color = ErrorColor) },
@@ -272,7 +321,7 @@ private fun SceneCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Activate button
+            // Buton de activare: arata "Active" cu icon check daca isExecuting = true
             AnimatedVisibility(visible = true) {
                 Button(
                     onClick = { if (!isExecuting) onExecute() },

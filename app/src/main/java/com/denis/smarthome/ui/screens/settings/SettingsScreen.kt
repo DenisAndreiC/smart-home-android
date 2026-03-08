@@ -1,6 +1,7 @@
 package com.denis.smarthome.ui.screens.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -38,8 +39,12 @@ fun SettingsScreen(
     val notifications     by viewModel.notifications.collectAsState()
     val lastSyncTime      by viewModel.lastSyncTime.collectAsState()
 
-    var showLogoutDialog  by remember { mutableStateOf(false) }
-    var showUrlDialog     by remember { mutableStateOf(false) }
+    var showLogoutDialog      by remember { mutableStateOf(false) }
+    var showUrlDialog         by remember { mutableStateOf(false) }
+    var showEditProfileDialog by remember { mutableStateOf(false) }
+    var showBugDialog         by remember { mutableStateOf(false) }
+    var showTosDialog         by remember { mutableStateOf(false) }
+    var showLanguageDialog    by remember { mutableStateOf(false) }
 
     // Logout confirmation
     if (showLogoutDialog) {
@@ -63,6 +68,101 @@ fun SettingsScreen(
                 TextButton(onClick = { showLogoutDialog = false }) {
                     Text("Cancel", color = OnSurface)
                 }
+            }
+        )
+    }
+
+    // Edit Profile dialog
+    if (showEditProfileDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditProfileDialog = false },
+            containerColor = Surface,
+            title = { Text("Edit Profile", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Current account:", color = OnSurface, fontSize = 12.sp)
+                    Text(userName.ifBlank { "—" }, color = Primary, fontWeight = FontWeight.Bold)
+                    Text(userEmail.ifBlank { "—" }, color = OnSurface, fontSize = 13.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Profile editing is not available in this version.", color = OnSurface, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showEditProfileDialog = false }) { Text("OK", color = Primary) }
+            }
+        )
+    }
+
+    // Report a Bug dialog
+    if (showBugDialog) {
+        AlertDialog(
+            onDismissRequest = { showBugDialog = false },
+            containerColor = Surface,
+            title = { Text("Report a Bug", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Found a bug? Contact us at:", color = OnSurface)
+                    Text("support@smarthome.app", color = Primary, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Please describe the issue and the steps to reproduce it.", color = OnSurface, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showBugDialog = false }) { Text("OK", color = Primary) }
+            }
+        )
+    }
+
+    // Terms of Service dialog
+    if (showTosDialog) {
+        AlertDialog(
+            onDismissRequest = { showTosDialog = false },
+            containerColor = Surface,
+            title = { Text("Terms of Service", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "By using SmartHome, you agree to use this application only for lawful purposes. " +
+                    "The app communicates with your local smart home server. " +
+                    "We do not collect or share your personal data with third parties. " +
+                    "This software is provided as-is for educational purposes.",
+                    color = OnSurface, fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showTosDialog = false }) { Text("Close", color = Primary) }
+            }
+        )
+    }
+
+    // Language dialog
+    if (showLanguageDialog) {
+        val languages = listOf("English", "Română")
+        AlertDialog(
+            onDismissRequest = { showLanguageDialog = false },
+            containerColor = Surface,
+            title = { Text("Language", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    languages.forEach { lang ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showLanguageDialog = false }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(lang, color = OnBackground, modifier = Modifier.weight(1f))
+                            if (lang == "Română") {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("Language change requires app restart.", color = OnSurface, fontSize = 11.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLanguageDialog = false }) { Text("Cancel", color = OnSurface) }
             }
         )
     }
@@ -137,7 +237,7 @@ fun SettingsScreen(
                     }
                     Spacer(Modifier.height(12.dp))
                     OutlinedButton(
-                        onClick = { },
+                        onClick = { showEditProfileDialog = true },
                         shape = RoundedCornerShape(20.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Primary),
@@ -239,7 +339,8 @@ fun SettingsScreen(
                         icon = Icons.Default.Language,
                         label = "Language",
                         value = "Română",
-                        showChevron = true
+                        showChevron = true,
+                        onClick = { showLanguageDialog = true }
                     )
                 }
             }
@@ -260,11 +361,11 @@ fun SettingsScreen(
                     HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
                     SettingsRow(icon = Icons.Default.Code,        label = "Backend Version",  value = "FastAPI 0.115")
                     HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
-                    SettingsRow(icon = Icons.Default.BugReport,   label = "Report a Bug",     showChevron = true)
+                    SettingsRow(icon = Icons.Default.BugReport,   label = "Report a Bug",     showChevron = true, onClick = { showBugDialog = true })
                     HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
-                    SettingsRow(icon = Icons.Default.Description,  label = "Terms of Service", showChevron = true)
+                    SettingsRow(icon = Icons.Default.Description,  label = "Terms of Service", showChevron = true, onClick = { showTosDialog = true })
                     HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
-                    SettingsRow(icon = Icons.Default.PrivacyTip,  label = "Privacy Policy",   showChevron = true)
+                    SettingsRow(icon = Icons.Default.PrivacyTip,  label = "Privacy Policy",   showChevron = true, onClick = { showTosDialog = true })
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -309,7 +410,10 @@ private fun SettingsRow(
     trailingContent: (@Composable () -> Unit)? = null
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(14.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(

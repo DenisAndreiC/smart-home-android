@@ -1,3 +1,14 @@
+/**
+ * RgbBulbScreen.kt - Ecran de control pentru becul RGB inteligent
+ *
+ * Afiseaza un cerc hero cu efect de glow realizat prin drawBehind pe Canvas,
+ * un card pentru power si luminozitate (Slider dezactivat cand becul e oprit),
+ * o roata de culori (ColorWheel) pentru selectia culorii si un grid 2x3 cu presetari rapide.
+ * Cand becul este oprit, cercul hero devine gri inchis (#2A2A2A) iar slider-ul e disabled.
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.screens.control
 
 import android.app.Application
@@ -30,6 +41,15 @@ import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.RgbBulbViewModel
 import com.denis.smarthome.viewmodel.rgbPresets
 
+/**
+ * Ecranul principal de control al becului RGB.
+ * Colecteaza starea completa din RgbBulbViewModel (isOn, brightness, selectedColor,
+ * selectedAngle, selectedPreset) si le afiseaza intr-o interfata scrollabila.
+ *
+ * @param navController pentru navigare inapoi
+ * @param device datele dispozitivului (nume si camera)
+ * @param deviceId ID-ul dispozitivului pentru ViewModel
+ */
 @Composable
 fun RgbBulbScreen(
     navController: NavController,
@@ -65,6 +85,8 @@ fun RgbBulbScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             // ── Top Bar ──────────────────────────────────────────────────────
+            // Bara superioara cu buton Back (stanga), titlu (centru) si meniu MoreVert (dreapta).
+            // Meniul MoreVert contine optiunile Rename si Delete pentru dispozitiv.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -84,6 +106,7 @@ fun RgbBulbScreen(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.Center)
                 )
+                // Dropdown cu optiuni suplimentare per dispozitiv
                 Box(modifier = Modifier.align(Alignment.CenterEnd)) {
                     IconButton(onClick = { showMenu = !showMenu }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "More", tint = OnSurface)
@@ -113,6 +136,8 @@ fun RgbBulbScreen(
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 // ── Hero Bulb Circle ─────────────────────────────────────────
+                // Cercul principal care reflecta culoarea curenta a becului.
+                // Cand becul e oprit, culoarea devine gri inchis (#2A2A2A) fara glow.
                 val heroColor = if (isOn) selectedColor else Color(0xFF2A2A2A)
                 val lighterColor = if (isOn) {
                     Color(
@@ -127,14 +152,16 @@ fun RgbBulbScreen(
                         .size(180.dp)
                         .clip(CircleShape)
                         .drawBehind {
-                            // Glow effect behind
+                            // Efect glow: un cerc mare semitransparent (alpha=0.25) desenat in spate,
+                            // cu raza mai mare decat cercul principal, vizibil doar cand becul e pornit.
                             if (isOn) {
                                 drawCircle(
                                     color = selectedColor.copy(alpha = 0.25f),
                                     radius = size.minDimension * 0.58f
                                 )
                             }
-                            // Main gradient circle
+                            // Cercul principal cu gradient radial: de la culoarea mai deschisa (centru)
+                            // la culoarea selectata (margine), centrul gradientului e offset spre stanga-sus
                             drawCircle(
                                 brush = Brush.radialGradient(
                                     colors = listOf(lighterColor, heroColor),
@@ -168,6 +195,9 @@ fun RgbBulbScreen(
                 }
 
                 // ── Power + Brightness Card ───────────────────────────────────
+                // Card cu doua randuri: Power (Switch) si Brightness (Slider).
+                // Slider-ul are enabled=false cand becul e oprit, prevenind modificarea
+                // luminozitatii fara ca becul sa fie activ.
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Surface),
@@ -231,6 +261,8 @@ fun RgbBulbScreen(
                 }
 
                 // ── Color Spectrum ────────────────────────────────────────────
+                // Componenta ColorWheel pentru selectia culorii prin atingere.
+                // Culoarea si unghiul selectat sunt trimise catre ViewModel doar cand becul e pornit.
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -255,6 +287,8 @@ fun RgbBulbScreen(
                 }
 
                 // ── Quick Presets ─────────────────────────────────────────────
+                // Grid 2x3 cu presetarile de culori predefinite (de ex. Warm White, Red, Blue etc.)
+                // Presetarile sunt definite in RgbBulbViewModel ca lista rgbPresets.
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -265,7 +299,7 @@ fun RgbBulbScreen(
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    // Row 1
+                    // Primul rand: primele 3 presetari din lista rgbPresets
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -279,7 +313,7 @@ fun RgbBulbScreen(
                             )
                         }
                     }
-                    // Row 2
+                    // Al doilea rand: urmatoarele 3 presetari (pozitiile 3, 4, 5)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween

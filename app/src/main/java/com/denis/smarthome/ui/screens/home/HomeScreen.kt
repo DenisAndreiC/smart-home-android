@@ -1,3 +1,14 @@
+/**
+ * HomeScreen.kt - Ecranul principal (dashboard) al aplicatiei SmartHome
+ *
+ * Afiseaza salutul utilizatorului, statistici despre dispozitive, actiuni rapide
+ * si un grid 2x2 cu camerele din casa. Suporta pull-to-refresh prin PullToRefreshBox.
+ * Grid-ul este implementat cu doua Row-uri manuale (nu LazyVerticalGrid) pentru a
+ * evita nested lazy layouts intr-un LazyColumn parinte.
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.screens.home
 
 import android.util.Log
@@ -26,7 +37,9 @@ import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.HomeViewModel
 import com.denis.smarthome.viewmodel.RoomInfo
 
-// Gradient palettes per room slot (cycling)
+// Lista de palete gradient pentru cardurile de camera (ciclic, cate una pe slot).
+// Fiecare pereche merge de la o culoare inchisa tematica spre culoarea Background,
+// creand un efect de adancime vizuala diferit per camera.
 private val roomGradients = listOf(
     listOf(Color(0xFF0D3545), Background),  // teal-dark (Living)
     listOf(Color(0xFF2A1535), Background),  // purple-dark (Bedroom)
@@ -35,6 +48,16 @@ private val roomGradients = listOf(
     listOf(Color(0xFF2A0D0D), Background),  // red-dark
 )
 
+/**
+ * Ecranul principal cu dashboard-ul SmartHome.
+ *
+ * Foloseste [PullToRefreshBox] pentru a permite utilizatorului sa reimprospateze
+ * datele prin gestul de tragere in jos. Continutul principal este un [LazyColumn]
+ * cu sectiunile: header salut, statistici, actiuni rapide si grid camere.
+ *
+ * @param navController Controlerul de navigare Compose
+ * @param viewModel ViewModel-ul care furnizeaza datele dashboard-ului
+ */
 @Composable
 fun HomeScreen(
     navController: NavController,
@@ -47,9 +70,36 @@ fun HomeScreen(
 
     val greeting = viewModel.greeting
     val currentDate = viewModel.currentDate
-    val userName = user?.name?.split(" ")?.firstOrNull() ?: ""
+    val userName = user?.username?.split(" ")?.firstOrNull() ?: ""
 
     var activeChipIndex by remember { mutableStateOf(-1) }
+    var showAddRoomDialog by remember { mutableStateOf(false) }
+
+    if (showAddRoomDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddRoomDialog = false },
+            containerColor = Surface,
+            title = { Text("Add Room", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "To add a room, go to Devices and add a device with the desired room name. " +
+                    "Rooms are created automatically based on your devices.",
+                    color = OnSurface
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showAddRoomDialog = false
+                    navController.navigate(NavRoutes.Devices.route)
+                }) { Text("Go to Devices", color = Primary) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddRoomDialog = false }) {
+                    Text("Cancel", color = OnSurface)
+                }
+            }
+        )
+    }
 
     @OptIn(ExperimentalMaterial3Api::class)
     Box(
@@ -57,6 +107,8 @@ fun HomeScreen(
             .fillMaxSize()
             .background(Background)
     ) {
+        // PullToRefreshBox din M3 experimental: arata indicator de refresh cand isLoading
+        // si apeleaza loadDashboard() cand utilizatorul trage in jos
         PullToRefreshBox(
             isRefreshing = isLoading,
             onRefresh = { viewModel.loadDashboard() },
@@ -66,7 +118,7 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 88.dp)
         ) {
-            // ── Greeting Header ──────────────────────────────────────────────
+            // ── Header salut: avatar circular + salut personalizat + data curenta ──
             item {
                 Row(
                     modifier = Modifier
@@ -109,7 +161,7 @@ fun HomeScreen(
                         }
                     }
 
-                    // Notification icon with badge
+                    // ── Iconita notificari cu badge rosu de activitate ──
                     Box {
                         IconButton(onClick = { }) {
                             Icon(
@@ -131,7 +183,7 @@ fun HomeScreen(
                 }
             }
 
-            // ── Stats ────────────────────────────────────────────────────────
+            // ── Sectiunea statistici: LazyRow cu StatCard-uri pentru dispozitive, consum, automatizari ──
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 SectionTitle(title = "Statistici")
@@ -166,7 +218,7 @@ fun HomeScreen(
                 }
             }
 
-            // ── Quick Actions ────────────────────────────────────────────────
+            // ── Sectiunea actiuni rapide: LazyRow cu QuickActionChip-uri pentru scenarii comune ──
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 SectionTitle(title = "Acțiuni Rapide")
@@ -221,7 +273,7 @@ fun HomeScreen(
                 }
             }
 
-            // ── Rooms ────────────────────────────────────────────────────────
+            // ── Sectiunea camere: grid 2x2 cu RoomCard-uri si un card de adaugare ──
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 SectionTitle(
@@ -235,7 +287,7 @@ fun HomeScreen(
                     }
                 )
 
-                // Loading indicator
+                // Indicator de incarcare centrat cat timp datele se incarca de la API
                 if (isLoading) {
                     Box(
                         modifier = Modifier
@@ -249,14 +301,14 @@ fun HomeScreen(
                     RoomsGrid(
                         rooms = rooms,
                         onRoomClick = { navController.navigate(NavRoutes.Devices.route) },
-                        onAddRoomClick = { Log.d("HomeScreen", "Add room clicked") }
+                        onAddRoomClick = { showAddRoomDialog = true }
                     )
                 }
             }
         }
         } // end PullToRefreshBox
 
-        // ── FAB ──────────────────────────────────────────────────────────────
+        // ── FAB (Floating Action Button) pentru adaugare rapida dispozitiv ──
         FloatingActionButton(
             onClick = { Log.d("HomeScreen", "FAB add device clicked") },
             modifier = Modifier
@@ -271,13 +323,25 @@ fun HomeScreen(
     }
 }
 
+/**
+ * Grid 2x2 pentru afisarea camerelor din casa.
+ *
+ * Implementat cu doua [Row]-uri manuale (nu LazyVerticalGrid) pentru a evita
+ * nested lazy layouts intr-un LazyColumn parinte. Afiseaza maximum 3 camere
+ * reale plus un card de adaugare (AddRoomCard) pe ultimul slot disponibil.
+ * Cand nu exista date de la API, foloseste camere de tip placeholder.
+ *
+ * @param rooms Lista camerelor primite din ViewModel
+ * @param onRoomClick Callback apelat la click pe o camera
+ * @param onAddRoomClick Callback apelat la click pe cardul de adaugare camera
+ */
 @Composable
 private fun RoomsGrid(
     rooms: List<RoomInfo>,
     onRoomClick: (String) -> Unit,
     onAddRoomClick: () -> Unit
 ) {
-    // Show up to 3 rooms, then "Add" card — always 4 slots in 2×2 grid
+    // Afiseaza maximum 3 camere; daca lista e goala, foloseste date placeholder
     val displayRooms = if (rooms.isEmpty()) {
         listOf(
             RoomInfo("Living Room", 3, 2),
@@ -290,7 +354,7 @@ private fun RoomsGrid(
         modifier = Modifier.padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Row 1
+        // Randul 1 al gridului: primele doua sloturi (camera 0 si camera 1 sau AddRoom)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (displayRooms.isNotEmpty()) {
                 RoomCard(
@@ -322,7 +386,7 @@ private fun RoomsGrid(
             }
         }
 
-        // Row 2
+        // Randul 2 al gridului: camera 2 si intotdeauna cardul de adaugare camera
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (displayRooms.size >= 3) {
                 RoomCard(

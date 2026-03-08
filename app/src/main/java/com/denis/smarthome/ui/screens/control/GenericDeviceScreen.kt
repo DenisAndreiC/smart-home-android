@@ -1,3 +1,13 @@
+/**
+ * GenericDeviceScreen.kt - Ecran de control generic (fallback) pentru dispozitive fara UI dedicat
+ *
+ * Folosit ca ecran de rezerva pentru dispozitivele care nu sunt detectate ca TV, AC, RGB sau Relay.
+ * Afiseaza un icon generic, textul de status ON/OFF si un Switch simplu pentru control.
+ * Starea locala isOn este sincronizata cu backend-ul prin DevicesViewModel.toggleDevice().
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.screens.control
 
 import android.app.Application
@@ -23,6 +33,15 @@ import com.denis.smarthome.data.model.DeviceResponse
 import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.DevicesViewModel
 
+/**
+ * Ecran de control generic pentru dispozitivele fara interfata dedicata.
+ * Afiseaza tipul dispozitivului, camera si un switch simplu pentru pornire/oprire.
+ * Starea initiala isOn este preluata din device.is_active la incarcarea ecranului.
+ *
+ * @param navController pentru navigare inapoi
+ * @param device datele dispozitivului (tip, nume, camera, stare initiala)
+ * @param deviceId ID-ul dispozitivului pentru apelul API de toggle
+ */
 @Composable
 fun GenericDeviceScreen(
     navController: NavController,
@@ -40,7 +59,8 @@ fun GenericDeviceScreen(
                 .padding(innerPadding),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top Bar
+            // ── Top Bar ──────────────────────────────────────────────────────
+            // Bara superioara simpla: buton Back (stanga) si nume + camera (centru)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -66,7 +86,9 @@ fun GenericDeviceScreen(
 
             Spacer(modifier = Modifier.height(60.dp))
 
-            // Device icon
+            // ── Hero Icon ────────────────────────────────────────────────────
+            // Cerc cu icon generic de dispozitiv; fundalul si tinta iconitei
+            // isi schimba culoarea in functie de starea isOn
             Box(
                 modifier = Modifier
                     .size(120.dp)
@@ -99,6 +121,8 @@ fun GenericDeviceScreen(
 
             Spacer(modifier = Modifier.height(48.dp))
 
+            // Switch mare pentru pornire/oprire; la schimbare actualizeaza starea locala
+            // si apeleaza viewModel.toggleDevice() pentru sincronizarea cu backend-ul
             Switch(
                 checked = isOn,
                 onCheckedChange = { newState ->

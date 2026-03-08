@@ -1,3 +1,14 @@
+/**
+ * LampControlScreen.kt - Ecran de control pentru lampa/relay inteligent
+ *
+ * Afiseaza un cerc hero cu border animat (teal cand pornita, gri cand oprita),
+ * text de status, un switch mare pentru pornire/oprire, carduri de statistici
+ * si o sectiune de programari (schedules) cu posibilitatea de a adauga noi intrari.
+ * Folosit atat pentru dispozitive de tip relay cat si WoL (Wake-on-LAN).
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.screens.control
 
 import android.app.Application
@@ -31,6 +42,15 @@ import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.LampControlViewModel
 import com.denis.smarthome.viewmodel.Schedule
 
+/**
+ * Ecranul principal de control al lampii/relay-ului.
+ * Afiseaza starea curenta (ON/OFF), permite pornirea/oprirea prin LargeToggleSwitch
+ * si gestioneaza programarile (schedules) salvate local in ViewModel.
+ *
+ * @param navController pentru navigare inapoi
+ * @param device datele dispozitivului (nume si camera)
+ * @param deviceId ID-ul dispozitivului pentru ViewModel
+ */
 @Composable
 fun LampControlScreen(
     navController: NavController,
@@ -74,6 +94,7 @@ fun LampControlScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             // ── Top Bar ──────────────────────────────────────────────────────
+            // Bara superioara cu buton Back (stanga), titlu (centru) si meniu MoreVert (dreapta)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -122,6 +143,8 @@ fun LampControlScreen(
                 verticalArrangement = Arrangement.spacedBy(28.dp)
             ) {
                 // ── Hero Bulb Circle ─────────────────────────────────────────
+                // Cerc mare (220dp) cu border colorat: teal (Primary) cand lampa e pornita,
+                // gri (Outline) cand e oprita. Iconita din interior isi schimba si ea culoarea.
                 Box(
                     modifier = Modifier
                         .size(220.dp)
@@ -159,12 +182,15 @@ fun LampControlScreen(
                 }
 
                 // ── Large Toggle ──────────────────────────────────────────────
+                // Switch supradimensionat pentru pornire/oprire facila a lampii
                 LargeToggleSwitch(
                     checked = isOn,
                     onCheckedChange = { viewModel.togglePower() }
                 )
 
                 // ── Stats Row ─────────────────────────────────────────────────
+                // Doua carduri de statistici (StatCard refolosit din componente comune):
+                // puterea consumata in W si orele de utilizare astazi
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -186,6 +212,8 @@ fun LampControlScreen(
                 }
 
                 // ── Schedules ─────────────────────────────────────────────────
+                // Lista de programari salvate local in ViewModel.
+                // Butonul "Add New" deschide AddScheduleDialog pentru adaugarea unei noi programari.
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -222,6 +250,16 @@ fun LampControlScreen(
     }
 }
 
+/**
+ * Dialog pentru adaugarea unei noi programari a lampii.
+ * Contine un formular cu un singur pas cu campurile:
+ * - Nume programare (ex: "Sunset On")
+ * - Ora (ex: "6:45 PM")
+ * - Actiune: Turn ON / Turn OFF (Switch)
+ * - Repetare: dropdown cu optiunile Daily / Weekdays / Once
+ *
+ * La confirmare construieste un obiect Schedule si il trimite prin callback onConfirm.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddScheduleDialog(

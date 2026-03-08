@@ -1,3 +1,14 @@
+/**
+ * AcControlScreen.kt - Ecran de control pentru aparatul de aer conditionat
+ *
+ * Ofera control complet al AC-ului: temperatura (afisata circular cu butoane +/-),
+ * mod de functionare (Cool/Heat/Fan/Auto/Dry), viteza ventilatorului cu bara de progres,
+ * oscilatie swing si timer cu increment/decrement. FAB-ul de power isi schimba culoarea
+ * in functie de starea isOn (teal=pornit, gri=oprit).
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.screens.control
 
 import android.app.Application
@@ -30,6 +41,16 @@ import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.AcControlViewModel
 import com.denis.smarthome.viewmodel.FanSpeed
 
+/**
+ * Ecranul principal de control al aparatului de aer conditionat.
+ * Colecteaza toate starile din AcControlViewModel si le afiseaza in carduri dedicate.
+ * FAB-ul de power este pozitionat floating la baza ecranului si isi schimba culoarea:
+ * teal (Primary) cand AC-ul este pornit, gri (SurfaceVariant) cand este oprit.
+ *
+ * @param navController pentru butonul de intoarcere
+ * @param device datele dispozitivului (nume si camera)
+ * @param deviceId ID-ul dispozitivului pentru initializarea ViewModel-ului
+ */
 @Composable
 fun AcControlScreen(
     navController: NavController,
@@ -53,6 +74,7 @@ fun AcControlScreen(
         error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
     }
 
+    // Mapare viteza ventilator -> progres bara liniara (LOW=25%, MED=50%, HIGH=75%, AUTO=100%)
     val fanSpeeds = FanSpeed.values()
     val fanSpeedProgress = mapOf(
         FanSpeed.LOW to 0.25f,
@@ -72,6 +94,8 @@ fun AcControlScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             // ── Top Bar ──────────────────────────────────────────────────────
+            // Bara superioara simpla: buton Back (stanga) si nume + camera (centru)
+            // AC-ul nu are indicator de status in top bar (spre deosebire de TV)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -107,6 +131,9 @@ fun AcControlScreen(
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 // ── Temperature Display ───────────────────────────────────────
+                // CircularTemperatureDisplay afiseaza temperatura curenta intr-un cerc animat.
+                // Butoanele -/+ sunt suprapuse (overlaid) la baza cercului si sunt
+                // vizibile doar cand AC-ul este pornit (isOn == true).
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
@@ -115,7 +142,7 @@ fun AcControlScreen(
                         temperature = temperature,
                         isOn = isOn
                     )
-                    // -/+ buttons overlaid at bottom of the circle
+                    // Butoanele de scadere/crestere temperatura, afisate doar cand AC-ul e pornit
                     if (isOn) {
                         Row(
                             modifier = Modifier
@@ -148,6 +175,7 @@ fun AcControlScreen(
                 }
 
                 // ── Mode Selector ─────────────────────────────────────────────
+                // Card cu componenta ModeSelector pentru alegerea modului AC (Cool/Heat/Fan/Auto/Dry)
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Surface),
                     shape = RoundedCornerShape(16.dp)
@@ -159,6 +187,8 @@ fun AcControlScreen(
                 }
 
                 // ── Fan Speed ─────────────────────────────────────────────────
+                // Card cu LinearProgressIndicator pentru viteza ventilatorului si
+                // 4 butoane selectabile (LOW/MED/HIGH/AUTO), cel selectat avand border teal
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Surface),
                     shape = RoundedCornerShape(16.dp)
@@ -222,11 +252,12 @@ fun AcControlScreen(
                 }
 
                 // ── Swing + Timer row ─────────────────────────────────────────
+                // Doua carduri plasate orizontal: Swing cu Switch si Timer cu butoane +/- ore
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Swing card
+                    // Card Swing: Switch care activeaza/dezactiveaza oscilatia lamelor AC
                     Card(
                         modifier = Modifier.weight(1f),
                         colors = CardDefaults.cardColors(containerColor = Surface),
@@ -260,7 +291,8 @@ fun AcControlScreen(
                         }
                     }
 
-                    // Timer card
+                    // Card Timer: afiseaza orele setate si doua IconButton-uri (sus=+1h, jos=-1h)
+                    // Valoarea 0 inseamna timer dezactivat si afiseaza textul "Off"
                     Card(
                         modifier = Modifier.weight(1f),
                         colors = CardDefaults.cardColors(containerColor = Surface),
@@ -300,6 +332,9 @@ fun AcControlScreen(
         }
 
         // ── Power FAB ────────────────────────────────────────────────────────
+        // Buton flotant circular pozitionat la baza ecranului (BottomCenter).
+        // Culoarea se schimba dinamic: Primary (teal) cand AC-ul e pornit,
+        // SurfaceVariant (gri) cand AC-ul e oprit. Apeleaza viewModel.togglePower().
         Box(modifier = Modifier.fillMaxSize()) {
             FloatingActionButton(
                 onClick = { viewModel.togglePower() },

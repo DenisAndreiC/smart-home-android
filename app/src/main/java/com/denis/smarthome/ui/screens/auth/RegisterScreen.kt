@@ -1,3 +1,13 @@
+/**
+ * RegisterScreen.kt - Ecranul de inregistrare al aplicatiei SmartHome
+ *
+ * Afiseaza un formular cu campuri pentru nume, email, parola si confirmare parola.
+ * Valideaza ca parolele coincid si ca termenii au fost acceptati inainte de a
+ * trimite cererea catre AuthViewModel. Dupa inregistrare reusita navigheaza la Home.
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.screens.auth
 
 import androidx.compose.animation.AnimatedVisibility
@@ -30,6 +40,16 @@ import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.AuthState
 import com.denis.smarthome.viewmodel.AuthViewModel
 
+/**
+ * Ecranul de creare cont nou.
+ *
+ * Starea formularului este tinuta local cu [remember]. [collectAsState] transforma
+ * StateFlow-ul din ViewModel intr-o valoare reactiva Compose. [LaunchedEffect] cu
+ * cheia [authState] detecteaza succesul si navigheaza la Home, curatand Login din stiva.
+ *
+ * @param navController Controlerul de navigare Compose
+ * @param authViewModel ViewModel-ul care gestioneaza logica de autentificare
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterScreen(
@@ -44,10 +64,12 @@ fun RegisterScreen(
     var confirmPasswordVisible by remember { mutableStateOf(false) }
     var termsAccepted by remember { mutableStateOf(false) }
 
+    // collectAsState transforma StateFlow in valoare reactiva pentru Compose
     val authState by authViewModel.authState.collectAsState()
     val isLoading = authState is AuthState.Loading
     val errorMessage = (authState as? AuthState.Error)?.message
 
+    // Navigheaza la Home cand inregistrarea reuseste si elimina Login din stiva
     LaunchedEffect(authState) {
         if (authState is AuthState.Success) {
             navController.navigate(NavRoutes.Home.route) {
@@ -121,7 +143,7 @@ fun RegisterScreen(
                     unfocusedTextColor = OnBackground,
                 )
 
-                // Name field
+                // ── Formular: camp Nume complet ──
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -134,7 +156,7 @@ fun RegisterScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Email field
+                // ── Formular: camp Email ──
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
@@ -149,7 +171,7 @@ fun RegisterScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Password field
+                // ── Formular: camp Parola cu toggle vizibilitate ──
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
@@ -173,7 +195,7 @@ fun RegisterScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Confirm password field
+                // ── Formular: camp confirmare parola cu validare vizuala isError ──
                 OutlinedTextField(
                     value = confirmPassword,
                     onValueChange = { confirmPassword = it },
@@ -203,7 +225,7 @@ fun RegisterScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Terms checkbox
+                // ── Checkbox pentru acceptarea Termenilor si Politicii de confidentialitate ──
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
@@ -246,7 +268,7 @@ fun RegisterScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Error
+                // ── Mesaj de eroare animat (apare doar cand exista eroare de la API) ──
                 AnimatedVisibility(visible = errorMessage != null) {
                     errorMessage?.let {
                         Card(
@@ -265,7 +287,7 @@ fun RegisterScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Create Account button
+                // ── Butonul de creare cont: enabled doar cand termenii sunt acceptati si parolele coincid ──
                 Button(
                     onClick = {
                         when {
@@ -292,7 +314,7 @@ fun RegisterScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // OR divider
+                // ── Separator orizontal cu eticheta OR SIGN UP WITH ──
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     HorizontalDivider(modifier = Modifier.weight(1f), color = Outline)
                     Text("  OR SIGN UP WITH  ", color = OnSurface, style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp)
@@ -301,7 +323,7 @@ fun RegisterScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Social buttons (UI only)
+                // ── Butoane sociale Google si Apple (UI only, fara integrare reala) ──
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -336,7 +358,7 @@ fun RegisterScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Login link
+                // ── Link catre ecranul de login pentru utilizatorii cu cont existent ──
                 Row(horizontalArrangement = Arrangement.Center) {
                     Text("Already have an account? ", color = OnSurface, style = MaterialTheme.typography.bodySmall)
                     Text(

@@ -1,3 +1,13 @@
+/**
+ * RoomCard.kt - Card de camera si card de adaugare camera pentru grid-ul HomeScreen
+ *
+ * [RoomCard] afiseaza numele camerei si numarul de dispozitive active cu un gradient
+ * de fundal personalizat. [AddRoomCard] este un card cu border punctat (dashedBorder)
+ * care permite utilizatorului sa adauge o camera noua.
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.components
 
 import androidx.compose.foundation.background
@@ -23,6 +33,16 @@ import com.denis.smarthome.ui.theme.OnBackground
 import com.denis.smarthome.ui.theme.OnSurface
 import com.denis.smarthome.ui.theme.Primary
 
+/**
+ * Card de camera cu gradient de fundal si informatii despre dispozitive.
+ *
+ * @param name Numele camerei (ex: "Living Room")
+ * @param activeCount Numarul de dispozitive active in camera
+ * @param deviceCount Numarul total de dispozitive in camera
+ * @param gradientColors Lista de culori pentru gradientul vertical de fundal
+ * @param onClick Callback apelat la click pe card
+ * @param modifier Modifier optional pentru stilizare externa
+ */
 @Composable
 fun RoomCard(
     name: String,
@@ -39,7 +59,7 @@ fun RoomCard(
             .background(Brush.verticalGradient(gradientColors))
             .clickable(onClick = onClick)
     ) {
-        // Arrow button top-right
+        // Buton sageata in coltul din dreapta sus pentru navigare rapida
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -57,7 +77,7 @@ fun RoomCard(
             )
         }
 
-        // Room info at bottom
+        // Informatii camera aliniate in partea de jos a cardului
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -79,6 +99,12 @@ fun RoomCard(
     }
 }
 
+/**
+ * Card de adaugare camera cu border punctat (dashedBorder Modifier extension).
+ *
+ * @param onClick Callback apelat la click pe card
+ * @param modifier Modifier optional pentru stilizare externa
+ */
 @Composable
 fun AddRoomCard(
     onClick: () -> Unit,

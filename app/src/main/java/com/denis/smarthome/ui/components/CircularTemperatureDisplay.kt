@@ -1,3 +1,13 @@
+/**
+ * CircularTemperatureDisplay.kt - Afisaj circular animat pentru temperatura AC
+ *
+ * Deseneaza prin Canvas un arc de progres in degradeu teal care reprezinta
+ * temperatura curenta intre 16 si 30 de grade Celsius. Cand dispozitivul este
+ * oprit, arcul dispare si temperatura este inlocuita cu "--°".
+ *
+ * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Autor: Denis Andrei C.
+ */
 package com.denis.smarthome.ui.components
 
 import androidx.compose.foundation.Canvas
@@ -21,6 +31,18 @@ import com.denis.smarthome.ui.theme.OnBackground
 import com.denis.smarthome.ui.theme.OnSurface
 import com.denis.smarthome.ui.theme.Primary
 
+/**
+ * Afisaj circular de temperatura cu arc de progres desenat prin Canvas.
+ *
+ * Arcul porneste din coltul stanga-jos (135°) si se extinde cu 270° in total.
+ * Progresul este calculat liniar intre temperatura minima (16°C) si maxima (30°C).
+ * Cand AC-ul este oprit (isOn = false), arcul de progres nu este desenat.
+ *
+ * @param temperature Temperatura curenta setata (in grade Celsius).
+ * @param isOn Starea AC-ului — activeaza sau dezactiveaza arcul colorat.
+ * @param modifier Modifier optional pentru personalizare externa.
+ * @param size Diametrul total al componentei circulare.
+ */
 @Composable
 fun CircularTemperatureDisplay(
     temperature: Int,
@@ -28,6 +50,7 @@ fun CircularTemperatureDisplay(
     modifier: Modifier = Modifier,
     size: Dp = 200.dp
 ) {
+    // Culorile arcului se schimba in gri inchis cand AC-ul este oprit
     val arcColor1 = if (isOn) Primary else Color(0xFF37474F)
     val arcColor2 = if (isOn) Color(0xFF00E5FF) else Color(0xFF546E7A)
 
@@ -37,11 +60,12 @@ fun CircularTemperatureDisplay(
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val strokeWidth = 12.dp.toPx()
+            // Padding pentru a nu taia arcul la marginea Canvas-ului
             val padding = strokeWidth / 2
             val arcSize = Size(this.size.width - padding * 2, this.size.height - padding * 2)
             val topLeft = Offset(padding, padding)
 
-            // Background track
+            // Arcul de fundal (track) — mereu vizibil, culoare inchisa
             drawArc(
                 color = Color(0xFF1E3040),
                 startAngle = 135f,
@@ -52,12 +76,13 @@ fun CircularTemperatureDisplay(
                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
             )
 
-            // Progress arc
+            // Calculul unghiului de progres — proportional cu intervalul 16°C–30°C
             val sweepAngle = if (isOn) {
                 val progress = (temperature - 16f) / (30f - 16f)
                 progress * 270f
             } else 0f
 
+            // Arcul de progres cu degradeu sweep — desenat doar daca AC-ul e pornit
             if (sweepAngle > 0f) {
                 drawArc(
                     brush = Brush.sweepGradient(
@@ -74,7 +99,7 @@ fun CircularTemperatureDisplay(
             }
         }
 
-        // Temperature text
+        // Sectiunea text centrata: valoarea temperaturii si unitatea/starea
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = if (isOn) "$temperature°" else "--°",
