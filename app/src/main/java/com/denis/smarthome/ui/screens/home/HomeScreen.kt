@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,11 +51,17 @@ fun HomeScreen(
 
     var activeChipIndex by remember { mutableStateOf(-1) }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Background)
     ) {
+        PullToRefreshBox(
+            isRefreshing = isLoading,
+            onRefresh = { viewModel.loadDashboard() },
+            modifier = Modifier.fillMaxSize()
+        ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 88.dp)
@@ -247,6 +254,7 @@ fun HomeScreen(
                 }
             }
         }
+        } // end PullToRefreshBox
 
         // ── FAB ──────────────────────────────────────────────────────────────
         FloatingActionButton(

@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -180,36 +181,44 @@ fun DevicesListScreen(
             }
 
             // ── Device List ──────────────────────────────────────────────────
-            if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Primary)
-                }
-            } else if (filteredDevices.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Default.DevicesOther, contentDescription = null, tint = OnSurface, modifier = Modifier.size(64.dp))
-                        Text("No devices found", color = OnSurface, style = MaterialTheme.typography.bodyLarge)
-                        TextButton(onClick = { viewModel.loadDevices() }) {
-                            Text("Retry", color = Primary)
+            @OptIn(ExperimentalMaterial3Api::class)
+            PullToRefreshBox(
+                isRefreshing = isLoading,
+                onRefresh = { viewModel.loadDevices() },
+                modifier = Modifier.fillMaxSize()
+            ) {
+                if (isLoading) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Primary)
+                    }
+                } else if (filteredDevices.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.DevicesOther, contentDescription = null, tint = OnSurface, modifier = Modifier.size(64.dp))
+                            Text("No devices yet", color = OnSurface, style = MaterialTheme.typography.bodyLarge)
+                            Text("Add your first device using the + button", color = OnSurface.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+                            TextButton(onClick = { viewModel.showAddDialog() }) {
+                                Text("Add Device", color = Primary)
+                            }
                         }
                     }
-                }
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(filteredDevices, key = { it.id }) { device ->
-                        DeviceListItem(
-                            device = device,
-                            onToggle = { isOn -> viewModel.toggleDevice(device.id, isOn) },
-                            onClick = {
-                                navController.navigate(NavRoutes.DeviceControl.createRoute(device.id))
-                            }
-                        )
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(filteredDevices, key = { it.id }) { device ->
+                            DeviceListItem(
+                                device = device,
+                                onToggle = { isOn -> viewModel.toggleDevice(device.id, isOn) },
+                                onClick = {
+                                    navController.navigate(NavRoutes.DeviceControl.createRoute(device.id))
+                                }
+                            )
+                        }
                     }
                 }
             }

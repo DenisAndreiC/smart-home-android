@@ -12,182 +12,331 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.unit.TextUnitType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.denis.smarthome.data.api.RetrofitClient
-import com.denis.smarthome.data.local.TokenManager
 import com.denis.smarthome.ui.navigation.NavRoutes
 import com.denis.smarthome.ui.theme.*
-import kotlinx.coroutines.launch
+import com.denis.smarthome.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     navController: NavController,
+    viewModel: SettingsViewModel = viewModel()
 ) {
-    val tokenManager = remember { TokenManager(navController.context) }
-    val scope = rememberCoroutineScope()
+    val userName          by viewModel.userName.collectAsState()
+    val userEmail         by viewModel.userEmail.collectAsState()
+    val isServerConnected by viewModel.isServerConnected.collectAsState()
+    val darkTheme         by viewModel.darkTheme.collectAsState()
+    val notifications     by viewModel.notifications.collectAsState()
+    val lastSyncTime      by viewModel.lastSyncTime.collectAsState()
+
+    var showLogoutDialog  by remember { mutableStateOf(false) }
+    var showUrlDialog     by remember { mutableStateOf(false) }
+
+    // Logout confirmation
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            containerColor = Surface,
+            title = { Text("Logout", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text  = { Text("Are you sure you want to logout?", color = OnSurface) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.logout()
+                    showLogoutDialog = false
+                    navController.navigate(NavRoutes.Login.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }) {
+                    Text("Logout", color = ErrorColor, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Cancel", color = OnSurface)
+                }
+            }
+        )
+    }
+
+    // Backend URL dialog
+    if (showUrlDialog) {
+        AlertDialog(
+            onDismissRequest = { showUrlDialog = false },
+            containerColor = Surface,
+            title = { Text("Backend URL", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Current URL:", color = OnSurface, fontSize = 12.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text(RetrofitClient.BASE_URL, color = Primary, fontSize = 13.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text("To change the backend URL, update RetrofitClient.BASE_URL and rebuild the app.", color = OnSurface, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showUrlDialog = false }) { Text("OK", color = Primary) }
+            }
+        )
+    }
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Background),
-        contentPadding = PaddingValues(bottom = 16.dp)
+        modifier = Modifier.fillMaxSize().background(Background),
+        contentPadding = PaddingValues(bottom = 32.dp)
     ) {
+        // ── Header ────────────────────────────────────────────────────────────
         item {
-            // Header
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Surface)
-                    .padding(horizontal = 20.dp, vertical = 20.dp)
+                modifier = Modifier.fillMaxWidth().background(Surface)
+                    .padding(horizontal = 20.dp, vertical = 18.dp)
             ) {
-                Text("Settings", style = MaterialTheme.typography.headlineSmall, color = OnBackground, fontWeight = FontWeight.Bold)
+                Text("Settings", color = OnBackground, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             }
+            Spacer(Modifier.height(16.dp))
+        }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Profile card
+        // ── Profile Card ──────────────────────────────────────────────────────
+        item {
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 colors = CardDefaults.cardColors(containerColor = Surface),
                 shape = RoundedCornerShape(16.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(PrimaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Person, contentDescription = null, tint = Primary, modifier = Modifier.size(30.dp))
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Your Account", color = OnBackground, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text("Manage your profile", color = OnSurface, style = MaterialTheme.typography.bodySmall)
-                    }
-                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = OnSurface)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-        }
-
-        item {
-            SectionHeader("Preferences")
-            SettingsItem(icon = Icons.Default.Notifications, label = "Notifications", subtitle = "Push notifications & alerts")
-            SettingsItem(icon = Icons.Default.Wifi, label = "Network", subtitle = "Backend URL configuration")
-            SettingsItem(icon = Icons.Default.DarkMode, label = "Appearance", subtitle = "Dark theme (default)")
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-            SectionHeader("About")
-            SettingsItem(icon = Icons.Default.Info, label = "App Version", subtitle = "1.0.0")
-            SettingsItem(icon = Icons.Default.Code, label = "Backend URL", subtitle = RetrofitClient.BASE_URL)
-            SettingsItem(icon = Icons.Default.Security, label = "Privacy Policy")
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-            SectionHeader("Account")
-        }
-
-        item {
-            // Logout button
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                colors = CardDefaults.cardColors(containerColor = ErrorColor.copy(alpha = 0.08f)),
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ErrorColor.copy(alpha = 0.3f)),
-                onClick = {
-                    scope.launch {
-                        tokenManager.clearToken()
-                        navController.navigate(NavRoutes.Login.route) {
-                            popUpTo(0) { inclusive = true }
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier.size(64.dp).clip(CircleShape)
+                                .background(SurfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Person, contentDescription = null, tint = OnSurface, modifier = Modifier.size(32.dp))
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = userName.ifBlank { "Your Account" },
+                                color = OnBackground,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = userEmail.ifBlank { "Not loaded" },
+                                color = OnSurface,
+                                fontSize = 14.sp
+                            )
                         }
                     }
-                }
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Logout, contentDescription = null, tint = ErrorColor, modifier = Modifier.size(22.dp))
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Text("Log Out", color = ErrorColor, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = { },
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Primary),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                    ) {
+                        Text("Edit Profile", color = Primary, fontSize = 13.sp)
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(Modifier.height(20.dp))
+        }
+
+        // ── Server Configuration ──────────────────────────────────────────────
+        item {
+            SettingsSectionTitle("SERVER")
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                colors = CardDefaults.cardColors(containerColor = Surface),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
+            ) {
+                Column {
+                    SettingsRow(
+                        icon = Icons.Default.Cloud,
+                        label = "Backend URL",
+                        value = RetrofitClient.BASE_URL,
+                        onClick = { showUrlDialog = true }
+                    )
+                    HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
+                    SettingsRow(
+                        icon = Icons.Default.Router,
+                        label = "MQTT Status",
+                        trailingContent = {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(
+                                    modifier = Modifier.size(8.dp).clip(CircleShape)
+                                        .background(if (isServerConnected) Color(0xFF4CAF50) else ErrorColor)
+                                )
+                                Text(
+                                    if (isServerConnected) "Connected" else "Disconnected",
+                                    color = if (isServerConnected) Color(0xFF4CAF50) else ErrorColor,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    )
+                    HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
+                    SettingsRow(
+                        icon = Icons.Default.Sync,
+                        label = "Last Sync",
+                        value = lastSyncTime
+                    )
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+        }
+
+        // ── Preferences ───────────────────────────────────────────────────────
+        item {
+            SettingsSectionTitle("PREFERENCES")
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                colors = CardDefaults.cardColors(containerColor = Surface),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
+            ) {
+                Column {
+                    SettingsRow(
+                        icon = Icons.Default.DarkMode,
+                        label = "Dark Theme",
+                        trailingContent = {
+                            Switch(
+                                checked = darkTheme,
+                                onCheckedChange = { viewModel.toggleDarkTheme() },
+                                colors = SwitchDefaults.colors(
+                                    checkedTrackColor = Primary, checkedThumbColor = Color.White,
+                                    uncheckedTrackColor = SurfaceVariant, uncheckedThumbColor = OnSurface
+                                )
+                            )
+                        }
+                    )
+                    HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
+                    SettingsRow(
+                        icon = Icons.Default.Notifications,
+                        label = "Push Notifications",
+                        trailingContent = {
+                            Switch(
+                                checked = notifications,
+                                onCheckedChange = { viewModel.toggleNotifications() },
+                                colors = SwitchDefaults.colors(
+                                    checkedTrackColor = Primary, checkedThumbColor = Color.White,
+                                    uncheckedTrackColor = SurfaceVariant, uncheckedThumbColor = OnSurface
+                                )
+                            )
+                        }
+                    )
+                    HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
+                    SettingsRow(
+                        icon = Icons.Default.Language,
+                        label = "Language",
+                        value = "Română",
+                        showChevron = true
+                    )
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+        }
+
+        // ── App Info ──────────────────────────────────────────────────────────
+        item {
+            SettingsSectionTitle("ABOUT")
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                colors = CardDefaults.cardColors(containerColor = Surface),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
+            ) {
+                Column {
+                    SettingsRow(icon = Icons.Default.Info,        label = "Version",          value = "1.0.0")
+                    HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
+                    SettingsRow(icon = Icons.Default.Code,        label = "Backend Version",  value = "FastAPI 0.115")
+                    HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
+                    SettingsRow(icon = Icons.Default.BugReport,   label = "Report a Bug",     showChevron = true)
+                    HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
+                    SettingsRow(icon = Icons.Default.Description,  label = "Terms of Service", showChevron = true)
+                    HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
+                    SettingsRow(icon = Icons.Default.PrivacyTip,  label = "Privacy Policy",   showChevron = true)
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+
+        // ── Logout Button ─────────────────────────────────────────────────────
+        item {
+            Button(
+                onClick = { showLogoutDialog = true },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A1A1A)),
+                contentPadding = PaddingValues(16.dp)
+            ) {
+                Icon(Icons.Default.Logout, contentDescription = null, tint = ErrorColor, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text("Logout", color = ErrorColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
 
 @Composable
-private fun SectionHeader(title: String) {
+private fun SettingsSectionTitle(title: String) {
     Text(
         text = title,
-        color = Primary,
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-        letterSpacing = TextUnit(1f, TextUnitType.Sp)
+        color = OnSurface,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.5.sp,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsItem(
+private fun SettingsRow(
     icon: ImageVector,
     label: String,
-    subtitle: String? = null,
-    onClick: () -> Unit = {}
+    value: String? = null,
+    showChevron: Boolean = false,
+    onClick: () -> Unit = {},
+    trailingContent: (@Composable () -> Unit)? = null
 ) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 3.dp),
-        colors = CardDefaults.cardColors(containerColor = Surface),
-        shape = RoundedCornerShape(12.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier.size(36.dp).clip(CircleShape).background(PrimaryContainer),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(PrimaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
+            Icon(icon, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(14.dp))
+        Text(label, color = OnBackground, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        if (trailingContent != null) {
+            trailingContent()
+        } else {
+            if (value != null) {
+                Text(
+                    value,
+                    color = OnSurface,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 120.dp)
+                )
             }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(label, color = OnBackground, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                if (subtitle != null) {
-                    Text(subtitle, color = OnSurface, style = MaterialTheme.typography.bodySmall)
-                }
+            if (showChevron) {
+                Spacer(Modifier.width(6.dp))
+                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = OnSurface, modifier = Modifier.size(18.dp))
             }
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = OnSurface, modifier = Modifier.size(18.dp))
         }
     }
 }

@@ -30,6 +30,7 @@ import com.denis.smarthome.ui.screens.auth.RegisterScreen
 import com.denis.smarthome.ui.screens.control.DeviceControlRouter
 import com.denis.smarthome.ui.screens.devices.DevicesListScreen
 import com.denis.smarthome.ui.screens.home.HomeScreen
+import com.denis.smarthome.ui.screens.scenes.SceneEditorScreen
 import com.denis.smarthome.ui.screens.scenes.ScenesScreen
 import com.denis.smarthome.ui.screens.settings.SettingsScreen
 import com.denis.smarthome.ui.theme.*
@@ -109,6 +110,16 @@ fun SmartHomeApp(tokenManager: TokenManager) {
                 ) { backStackEntry ->
                     val deviceId = backStackEntry.arguments?.getInt("deviceId") ?: 0
                     DeviceControlRouter(navController = navController, deviceId = deviceId)
+                }
+                composable(
+                    route = NavRoutes.SceneEditor.route,
+                    arguments = listOf(navArgument("sceneId") {
+                        type = NavType.IntType
+                        defaultValue = -1
+                    })
+                ) { backStackEntry ->
+                    val sceneId = backStackEntry.arguments?.getInt("sceneId") ?: -1
+                    SceneEditorScreen(navController = navController, sceneId = sceneId)
                 }
             }
         }

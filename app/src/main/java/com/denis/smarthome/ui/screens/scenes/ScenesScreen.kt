@@ -1,9 +1,13 @@
 package com.denis.smarthome.ui.screens.scenes
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -14,112 +18,179 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.delay
 import androidx.navigation.NavController
 import com.denis.smarthome.data.model.SceneResponse
+import com.denis.smarthome.ui.navigation.NavRoutes
 import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.ScenesViewModel
 
+private data class SceneVisuals(val icon: ImageVector, val iconTint: Color, val bgColor: Color)
+
+private fun sceneVisuals(name: String, iconStr: String?): SceneVisuals {
+    val n = name.lowercase()
+    return when {
+        n.contains("movie") || n.contains("cinema") ->
+            SceneVisuals(Icons.Default.Movie,         Color(0xFF00BCD4), Color(0xFF1A2A3A))
+        n.contains("morning") || n.contains("wake") || n.contains("good morning") ->
+            SceneVisuals(Icons.Default.WbSunny,       Color(0xFFFFD700), Color(0xFF2A2A1A))
+        n.contains("away")  ->
+            SceneVisuals(Icons.Default.DirectionsRun, Color(0xFF00BCD4), Color(0xFF1A2A2A))
+        n.contains("party") ->
+            SceneVisuals(Icons.Default.MusicNote,     Color(0xFFE040FB), Color(0xFF2A1A2A))
+        n.contains("sleep") || n.contains("night") || n.contains("bed") ->
+            SceneVisuals(Icons.Default.DarkMode,      Color(0xFF7986CB), Color(0xFF1A1A2A))
+        n.contains("work")  || n.contains("office") ->
+            SceneVisuals(Icons.Default.Computer,      Color(0xFF66BB6A), Color(0xFF1A2A1A))
+        else ->
+            SceneVisuals(Icons.Default.AutoAwesome,   Primary,           Color(0xFF1A2A35))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScenesScreen(
     navController: NavController,
     viewModel: ScenesViewModel = viewModel()
 ) {
-    val scenes by viewModel.scenes.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val executeMessage by viewModel.executeMessage.collectAsState()
-    val error by viewModel.error.collectAsState()
+    val scenes          by viewModel.scenes.collectAsState()
+    val isLoading       by viewModel.isLoading.collectAsState()
+    val error           by viewModel.error.collectAsState()
+    val executeMessage  by viewModel.executeMessage.collectAsState()
+    val executingId     by viewModel.executingSceneId.collectAsState()
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    var sceneToDelete by remember { mutableStateOf<SceneResponse?>(null) }
+
+    LaunchedEffect(error) {
+        error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
+    }
     LaunchedEffect(executeMessage) {
-        if (executeMessage != null) {
-            delay(2000)
-            viewModel.clearMessage()
-        }
+        executeMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearMessage() }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Background)
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Header
+    // Delete confirmation dialog
+    sceneToDelete?.let { scene ->
+        AlertDialog(
+            onDismissRequest = { sceneToDelete = null },
+            containerColor = Surface,
+            title = { Text("Delete Scene", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text  = { Text("Delete \"${scene.name}\"? This cannot be undone.", color = OnSurface) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.deleteScene(scene.id); sceneToDelete = null }) {
+                    Text("Delete", color = ErrorColor, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { sceneToDelete = null }) { Text("Cancel", color = OnSurface) }
+            }
+        )
+    }
+
+    Scaffold(
+        containerColor = Background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { navController.navigate(NavRoutes.SceneEditor.createRoute()) },
+                containerColor = Primary,
+                contentColor = Color.Black,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "New Scene")
+            }
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .background(Background)
+        ) {
+            // ── Header ───────────────────────────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Surface)
-                    .padding(horizontal = 20.dp, vertical = 20.dp)
+                    .padding(horizontal = 20.dp, vertical = 18.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(modifier = Modifier.align(Alignment.CenterStart)) {
+                    Text(
+                        "Scenes",
+                        color = OnBackground,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Automate your home with one tap",
+                        color = OnSurface,
+                        fontSize = 14.sp
+                    )
+                }
+                IconButton(
+                    onClick = { viewModel.loadScenes() },
+                    modifier = Modifier.align(Alignment.CenterEnd)
                 ) {
-                    Column {
-                        Text("Scenes", style = MaterialTheme.typography.headlineSmall, color = OnBackground, fontWeight = FontWeight.Bold)
-                        Text("Automate your routines", style = MaterialTheme.typography.bodySmall, color = OnSurface)
-                    }
-                    IconButton(onClick = { viewModel.loadScenes() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Primary)
-                    }
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Primary)
                 }
             }
 
-            if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Primary)
-                }
-            } else if (scenes.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = OnSurface, modifier = Modifier.size(64.dp))
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text("No scenes yet", color = OnSurface, style = MaterialTheme.typography.bodyLarge)
-                        Text("Create scenes to automate your home", color = OnSurface.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+            // ── Content ───────────────────────────────────────────────────────
+            when {
+                isLoading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Primary)
                     }
                 }
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(scenes, key = { it.id }) { scene ->
-                        SceneCard(
-                            scene = scene,
-                            onExecute = { viewModel.executeScene(scene.id) },
-                            onDelete = { viewModel.deleteScene(scene.id) }
-                        )
+                scenes.isEmpty() -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = OnSurface.copy(alpha = 0.4f),
+                                modifier = Modifier.size(72.dp)
+                            )
+                            Text("No scenes yet", color = OnSurface, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Create your first automation", color = OnSurface.copy(alpha = 0.6f), fontSize = 14.sp)
+                            Button(
+                                onClick = { navController.navigate(NavRoutes.SceneEditor.createRoute()) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Create Scene", color = Color.Black, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(scenes, key = { it.id }) { scene ->
+                            SceneCard(
+                                scene = scene,
+                                isExecuting = executingId == scene.id,
+                                onExecute = { viewModel.executeScene(scene.id) },
+                                onDelete = { sceneToDelete = scene }
+                            )
+                        }
                     }
                 }
             }
-        }
-
-        // Execute success snackbar
-        executeMessage?.let { msg ->
-            Snackbar(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(16.dp),
-                containerColor = PrimaryContainer,
-                contentColor = Primary
-            ) {
-                Text(msg)
-            }
-        }
-
-        // FAB
-        FloatingActionButton(
-            onClick = { /* navigate to scene editor */ },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp),
-            containerColor = Primary,
-            contentColor = Color.Black
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "Add scene")
         }
     }
 }
@@ -128,52 +199,97 @@ fun ScenesScreen(
 @Composable
 private fun SceneCard(
     scene: SceneResponse,
+    isExecuting: Boolean,
     onExecute: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val visuals = sceneVisuals(scene.name, scene.icon)
+    var showMenu by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Surface),
         shape = RoundedCornerShape(16.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(PrimaryContainer),
-                contentAlignment = Alignment.Center
+        Column(modifier = Modifier.padding(14.dp)) {
+            // Icon + overflow menu
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = scene.icon ?: "🏠",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(scene.name, color = OnBackground, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "${scene.actions.size} action${if (scene.actions.size != 1) "s" else ""}",
-                    color = OnSurface,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                IconButton(
-                    onClick = onExecute,
+                Box(
                     modifier = Modifier
+                        .size(48.dp)
                         .clip(CircleShape)
-                        .background(PrimaryContainer)
-                        .size(40.dp)
+                        .background(visuals.bgColor),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "Run", tint = Primary, modifier = Modifier.size(20.dp))
+                    Icon(
+                        imageVector = visuals.icon,
+                        contentDescription = null,
+                        tint = visuals.iconTint,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
-                IconButton(onClick = onDelete, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = ErrorColor, modifier = Modifier.size(20.dp))
+                Box {
+                    IconButton(onClick = { showMenu = true }, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = OnSurface, modifier = Modifier.size(16.dp))
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        modifier = Modifier.background(Surface)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit", color = OnBackground) },
+                            onClick = { showMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete", color = ErrorColor) },
+                            onClick = { showMenu = false; onDelete() }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = scene.name,
+                color = OnBackground,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+            Text(
+                text = "${scene.actions.size} device${if (scene.actions.size != 1) "s" else ""}",
+                color = OnSurface,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Activate button
+            AnimatedVisibility(visible = true) {
+                Button(
+                    onClick = { if (!isExecuting) onExecute() },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isExecuting) PrimaryContainer else Primary
+                    ),
+                    contentPadding = PaddingValues(vertical = 8.dp)
+                ) {
+                    if (isExecuting) {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = Primary, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Active", color = Primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    } else {
+                        Text("Activate", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }
