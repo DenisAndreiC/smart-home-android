@@ -64,15 +64,9 @@ fun LampControlScreen(
     )
     val isOn      by viewModel.isOn.collectAsState()
     val schedules by viewModel.schedules.collectAsState()
-    val error     by viewModel.error.collectAsState()
 
-    val snackbarHostState = remember { SnackbarHostState() }
     var showMenu by remember { mutableStateOf(false) }
     var showAddScheduleDialog by remember { mutableStateOf(false) }
-
-    LaunchedEffect(error) {
-        error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
-    }
 
     if (showAddScheduleDialog) {
         AddScheduleDialog(
@@ -85,8 +79,7 @@ fun LampControlScreen(
     }
 
     Scaffold(
-        containerColor = Background,
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        containerColor = Background
     ) { innerPadding ->
         Column(
             modifier = Modifier

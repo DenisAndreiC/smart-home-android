@@ -80,9 +80,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    private val _snackbarMessage = MutableStateFlow<String?>(null)
-    val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
-
     private val _unreadNotificationCount = MutableStateFlow(0)
     val unreadNotificationCount: StateFlow<Int> = _unreadNotificationCount.asStateFlow()
 
@@ -199,8 +196,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun allOff() {
         viewModelScope.launch {
             deviceRepo.allOff()
-                .onSuccess { _snackbarMessage.value = "All devices turned off" }
-                .onFailure { _snackbarMessage.value = "Failed: ${it.message}" }
+                .onFailure { _error.value = it.message }
         }
     }
 
@@ -212,8 +208,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun awayMode() {
         viewModelScope.launch {
             deviceRepo.awayMode()
-                .onSuccess { _snackbarMessage.value = "Away mode activated" }
-                .onFailure { _snackbarMessage.value = "Failed: ${it.message}" }
+                .onFailure { _error.value = it.message }
         }
     }
 
@@ -229,12 +224,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _executingSceneId.value = id
             runCatching { RetrofitClient.apiService.executeScene(id) }
-                .onSuccess { resp -> _snackbarMessage.value = resp["message"] ?: "Scene executed" }
-                .onFailure { _snackbarMessage.value = "Error: ${it.message}" }
+                .onFailure { _error.value = it.message }
             _executingSceneId.value = null
         }
     }
-
-    /** Clears the snackbar message after it has been displayed. */
-    fun clearSnackbar() { _snackbarMessage.value = null }
 }

@@ -12,7 +12,10 @@ package com.denis.smarthome.data.repository
 
 import com.denis.smarthome.data.api.ApiService
 import com.denis.smarthome.data.local.TokenManager
+import com.denis.smarthome.data.model.ChangePasswordRequest
+import com.denis.smarthome.data.model.ForgotPasswordRequest
 import com.denis.smarthome.data.model.LoginRequest
+import com.denis.smarthome.data.model.MessageResponse
 import com.denis.smarthome.data.model.RegisterRequest
 import com.denis.smarthome.data.model.UpdateUserRequest
 import com.denis.smarthome.data.model.UserResponse
@@ -149,5 +152,13 @@ class AuthRepository(
 
     suspend fun uploadAvatar(part: MultipartBody.Part): Result<UserResponse> = runCatching {
         apiService.uploadAvatar(part)
+    }
+
+    suspend fun changePassword(current: String, new: String): Result<MessageResponse> = runCatching {
+        apiService.changePassword(ChangePasswordRequest(current, new))
+    }
+
+    suspend fun forgotPassword(email: String): Result<MessageResponse> = runCatching {
+        apiService.forgotPassword(ForgotPasswordRequest(email))
     }
 }

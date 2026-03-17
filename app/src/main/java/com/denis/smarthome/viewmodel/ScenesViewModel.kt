@@ -41,10 +41,6 @@ class ScenesViewModel(application: Application) : AndroidViewModel(application) 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    // Mesajul de confirmare afisat dupa executia reusita a unei scene
-    private val _executeMessage = MutableStateFlow<String?>(null)
-    val executeMessage: StateFlow<String?> = _executeMessage.asStateFlow()
-
     /**
      * ID-ul scenei care se executa in momentul curent.
      *
@@ -85,7 +81,6 @@ class ScenesViewModel(application: Application) : AndroidViewModel(application) 
             // Marcam scena ca "in executie" pentru feedback vizual in UI
             _executingSceneId.value = id
             repository.executeScene(id)
-                .onSuccess { _executeMessage.value = it["message"] ?: "Scene executed!" }
                 .onFailure { _error.value = it.message }
             // Asteptam 2 secunde ca utilizatorul sa vada feedback-ul vizual
             delay(2000)
@@ -106,9 +101,6 @@ class ScenesViewModel(application: Application) : AndroidViewModel(application) 
                 .onFailure { _error.value = it.message }
         }
     }
-
-    /** Sterge mesajul de confirmare al executiei. */
-    fun clearMessage() { _executeMessage.value = null }
 
     /** Sterge mesajul de eroare curent. */
     fun clearError() { _error.value = null }

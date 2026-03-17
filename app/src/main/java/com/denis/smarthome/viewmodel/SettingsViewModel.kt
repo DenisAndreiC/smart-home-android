@@ -11,6 +11,7 @@
 package com.denis.smarthome.viewmodel
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.denis.smarthome.data.api.RetrofitClient
@@ -22,6 +23,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -43,9 +47,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _userName = MutableStateFlow("")
     val userName: StateFlow<String> = _userName.asStateFlow()
 
-    // Email-ul utilizatorului autentificat
+    // User email
     private val _userEmail = MutableStateFlow("")
     val userEmail: StateFlow<String> = _userEmail.asStateFlow()
+
+    // Avatar URL returned by the server after a successful upload
+    private val _avatarUrl = MutableStateFlow<String?>(null)
+    val avatarUrl: StateFlow<String?> = _avatarUrl.asStateFlow()
+
+    // True while an avatar upload is in progress
+    private val _isUploadingAvatar = MutableStateFlow(false)
+    val isUploadingAvatar: StateFlow<Boolean> = _isUploadingAvatar.asStateFlow()
 
     /**
      * Starea conexiunii cu serverul FastAPI.
@@ -100,9 +112,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             _isLoading.value = true
             authRepo.getMe()
                 .onSuccess {
-                    // Prefer display_name when set; fall back to username
                     _userName.value = it.display_name?.takeIf { n -> n.isNotBlank() } ?: it.username
                     _userEmail.value = it.email
+                    _avatarUrl.value = it.avatar_url?.takeIf { u -> u.isNotBlank() }
                     // Conexiunea cu serverul este confirmata - cererea a reusit
                     _isServerConnected.value = true
                     // Inregistram ora sincronizarii in format HH:mm (ex: "14:35")
@@ -144,29 +156,41 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { authRepo.logout() }
     }
 
-    private val _profileMessage = MutableStateFlow<String?>(null)
-    val profileMessage: StateFlow<String?> = _profileMessage.asStateFlow()
-
     /**
-     * Sends PUT /api/users/me with the new display_name, then re-fetches the profile
-     * so the displayed name reflects what was actually persisted on the server.
-     *
-     * @param newDisplayName the value to store as display_name
+     * Sends PUT /api/users/me with the new display_name, then re-fetches the profile.
      */
     fun updateUsername(newDisplayName: String) {
         viewModelScope.launch {
             authRepo.updateUser(newDisplayName)
                 .onSuccess {
-                    // Update name immediately from the response
                     _userName.value = it.display_name?.takeIf { n -> n.isNotBlank() } ?: it.username
-                    _profileMessage.value = "Profile updated"
-                    // Re-fetch to confirm persistence
                     loadUserInfo()
                 }
-                .onFailure { _profileMessage.value = "Error: ${it.message}" }
         }
     }
 
-    /** Clears the profile update snackbar message after it has been shown. */
-    fun clearProfileMessage() { _profileMessage.value = null }
+    /**
+     * Picks the image at [uri] from the content provider, converts it to a multipart body,
+     * and uploads it via POST /api/users/me/avatar.
+     * On success the returned avatar_url is stored in [avatarUrl].
+     */
+    fun uploadAvatar(uri: Uri) {
+        viewModelScope.launch {
+            _isUploadingAvatar.value = true
+            runCatching {
+                val cr = getApplication<Application>().contentResolver
+                val mimeType = cr.getType(uri) ?: "image/jpeg"
+                val bytes = cr.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching
+                val requestBody = bytes.toRequestBody(mimeType.toMediaType())
+                val extension = if (mimeType.contains("png")) "png" else "jpg"
+                val part = MultipartBody.Part.createFormData("avatar", "avatar.$extension", requestBody)
+                authRepo.uploadAvatar(part)
+                    .onSuccess { user ->
+                        _avatarUrl.value = user.avatar_url?.takeIf { it.isNotBlank() }
+                        user.display_name?.takeIf { it.isNotBlank() }?.let { _userName.value = it }
+                    }
+            }
+            _isUploadingAvatar.value = false
+        }
+    }
 }

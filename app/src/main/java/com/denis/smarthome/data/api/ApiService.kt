@@ -98,6 +98,12 @@ interface ApiService {
     @POST("users/me/avatar")
     suspend fun uploadAvatar(@Part avatar: MultipartBody.Part): UserResponse
 
+    @POST("auth/change-password")
+    suspend fun changePassword(@Body request: ChangePasswordRequest): MessageResponse
+
+    @POST("auth/forgot-password")
+    suspend fun forgotPassword(@Body request: ForgotPasswordRequest): MessageResponse
+
     // ── Stats ─────────────────────────────────────────────────────────────────
 
     @GET("stats/energy")

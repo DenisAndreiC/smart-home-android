@@ -33,17 +33,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import android.widget.Toast
 import com.denis.smarthome.ui.navigation.NavRoutes
 import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.AuthState
 import com.denis.smarthome.viewmodel.AuthViewModel
+import com.denis.smarthome.viewmodel.ForgotPasswordState
 
 /**
  * Ecranul de autentificare cu email si parola.
@@ -61,7 +60,6 @@ fun LoginScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel()
 ) {
-    val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
@@ -70,6 +68,10 @@ fun LoginScreen(
     val authState by authViewModel.authState.collectAsState()
     val isLoading = authState is AuthState.Loading
     val errorMessage = (authState as? AuthState.Error)?.message
+
+    val forgotState by authViewModel.forgotPasswordState.collectAsState()
+    var showForgotDialog by remember { mutableStateOf(false) }
+    var forgotEmail by remember { mutableStateOf("") }
 
     // LaunchedEffect ruleaza un bloc suspend ori de cate ori se schimba authState.
     // Cand login-ul reuseste, navigheaza la Home si elimina Login din stiva.
@@ -233,9 +235,7 @@ fun LoginScreen(
                     text = "Forgot password?",
                     color = Primary,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.clickable {
-                        Toast.makeText(context, "Feature coming soon", Toast.LENGTH_SHORT).show()
-                    }
+                    modifier = Modifier.clickable { showForgotDialog = true }
                 )
             }
 
@@ -355,5 +355,91 @@ fun LoginScreen(
                 )
             }
         }
+    }
+
+    // Forgot password dialog
+    if (showForgotDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showForgotDialog = false
+                authViewModel.resetForgotPasswordState()
+            },
+            containerColor = Color(0xFF0D2B36),
+            title = { Text("Reset Password", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    when (val state = forgotState) {
+                        is ForgotPasswordState.Success -> {
+                            Text(
+                                "Check your email for reset instructions",
+                                color = Color(0xFF00BCD4)
+                            )
+                        }
+                        is ForgotPasswordState.Error -> {
+                            Text(state.message, color = Color.Red, style = MaterialTheme.typography.bodySmall)
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedTextField(
+                                value = forgotEmail,
+                                onValueChange = { forgotEmail = it },
+                                label = { Text("Email", color = Color(0xFF90A4AE)) },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF00BCD4),
+                                    unfocusedBorderColor = Color(0xFF37474F),
+                                    cursorColor = Color(0xFF00BCD4),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        else -> {
+                            OutlinedTextField(
+                                value = forgotEmail,
+                                onValueChange = { forgotEmail = it },
+                                label = { Text("Email", color = Color(0xFF90A4AE)) },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF00BCD4),
+                                    unfocusedBorderColor = Color(0xFF37474F),
+                                    cursorColor = Color(0xFF00BCD4),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                    if (forgotState is ForgotPasswordState.Loading) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .align(Alignment.CenterHorizontally),
+                            color = Color(0xFF00BCD4),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                if (forgotState !is ForgotPasswordState.Success) {
+                    TextButton(
+                        onClick = { authViewModel.forgotPassword(forgotEmail) },
+                        enabled = forgotState !is ForgotPasswordState.Loading
+                    ) {
+                        Text("Send Reset Link", color = Color(0xFF00BCD4), fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showForgotDialog = false
+                    authViewModel.resetForgotPasswordState()
+                }) {
+                    Text("Cancel", color = Color.Gray)
+                }
+            }
+        )
     }
 }

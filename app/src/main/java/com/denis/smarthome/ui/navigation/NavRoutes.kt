@@ -51,6 +51,9 @@ sealed class NavRoutes(val route: String) {
         fun createRoute(deviceId: Int) = "device_control/$deviceId"
     }
 
+    /** Change-password screen, accessible from Settings. */
+    object ChangePassword : NavRoutes("change_password")
+
     /**
      * Ecranul editorului de scena — creare sau editare scena existenta.
      * [sceneId] este optional: absent = scena noua, prezent = editare.

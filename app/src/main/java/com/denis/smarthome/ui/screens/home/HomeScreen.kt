@@ -52,7 +52,6 @@ private val roomGradients = listOf(
  * Foloseste [PullToRefreshBox] pentru tragere in jos (refresh). Continutul este un
  * [LazyColumn] cu: header salut, statistici reale din API, actiuni rapide cu efecte
  * (allOff/awayMode) si grid 2x2 camere derivate din dispozitive.
- * Snackbar-ul este conectat la [HomeViewModel.snackbarMessage].
  *
  * @param navController controlerul de navigare Compose
  * @param viewModel ViewModel-ul care furnizeaza datele dashboard-ului
@@ -66,7 +65,6 @@ fun HomeScreen(
     val rooms by viewModel.rooms.collectAsState()
     val user by viewModel.user.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val snackbarMessage by viewModel.snackbarMessage.collectAsState()
     val unreadCount by viewModel.unreadNotificationCount.collectAsState()
     val energyKwh by viewModel.energyKwh.collectAsState()
     val scenes by viewModel.scenes.collectAsState()
@@ -78,15 +76,6 @@ fun HomeScreen(
 
     var activeChipIndex by remember { mutableStateOf(-1) }
     var showAddRoomDialog by remember { mutableStateOf(false) }
-
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(snackbarMessage) {
-        snackbarMessage?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.clearSnackbar()
-        }
-    }
 
     if (showAddRoomDialog) {
         AlertDialog(
@@ -116,8 +105,7 @@ fun HomeScreen(
 
     @OptIn(ExperimentalMaterial3Api::class)
     Scaffold(
-        containerColor = Background,
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        containerColor = Background
     ) { paddingValues ->
         Box(
             modifier = Modifier

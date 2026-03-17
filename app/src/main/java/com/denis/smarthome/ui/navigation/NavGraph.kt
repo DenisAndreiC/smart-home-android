@@ -33,6 +33,7 @@ import com.denis.smarthome.ui.screens.home.HomeScreen
 import com.denis.smarthome.ui.screens.notifications.NotificationsScreen
 import com.denis.smarthome.ui.screens.scenes.SceneEditorScreen
 import com.denis.smarthome.ui.screens.scenes.ScenesScreen
+import com.denis.smarthome.ui.screens.settings.ChangePasswordScreen
 import com.denis.smarthome.ui.screens.settings.SettingsScreen
 import com.denis.smarthome.ui.theme.*
 import kotlinx.coroutines.flow.firstOrNull
@@ -107,6 +108,9 @@ fun SmartHomeApp(tokenManager: TokenManager) {
                 }
                 composable(NavRoutes.Notifications.route) {
                     NotificationsScreen(navController = navController)
+                }
+                composable(NavRoutes.ChangePassword.route) {
+                    ChangePasswordScreen(navController = navController)
                 }
                 composable(
                     route = NavRoutes.DeviceControl.route,

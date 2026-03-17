@@ -28,6 +28,10 @@ import androidx.navigation.NavController
 import com.denis.smarthome.data.api.RetrofitClient
 import com.denis.smarthome.ui.navigation.NavRoutes
 import com.denis.smarthome.ui.theme.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.denis.smarthome.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,7 +47,15 @@ fun SettingsScreen(
     val darkTheme         by viewModel.darkTheme.collectAsState()
     val notifications     by viewModel.notifications.collectAsState()
     val lastSyncTime      by viewModel.lastSyncTime.collectAsState()
-    val profileMessage    by viewModel.profileMessage.collectAsState()
+    val avatarUrl         by viewModel.avatarUrl.collectAsState()
+    val isUploading       by viewModel.isUploadingAvatar.collectAsState()
+
+    // Gallery launcher — opens image picker, passes selected URI to the ViewModel
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri -> uri?.let { viewModel.uploadAvatar(it) } }
+
+    val baseUrl = "http://10.0.2.2:8000"
 
     var showLogoutDialog      by remember { mutableStateOf(false) }
     var showUrlDialog         by remember { mutableStateOf(false) }
@@ -51,19 +63,9 @@ fun SettingsScreen(
     var showTosDialog         by remember { mutableStateOf(false) }
     var newUsernameInput      by remember { mutableStateOf("") }
 
-    val snackbarHostState = remember { SnackbarHostState() }
-
     // Pre-fill display name input when dialog opens
     LaunchedEffect(showEditProfileDialog) {
         if (showEditProfileDialog) newUsernameInput = userName
-    }
-
-    // Show profile update result in snackbar
-    LaunchedEffect(profileMessage) {
-        profileMessage?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.clearProfileMessage()
-        }
     }
 
     // Logout confirmation
@@ -173,8 +175,7 @@ fun SettingsScreen(
     }
 
     Scaffold(
-        containerColor = Background,
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        containerColor = Background
     ) { innerPadding ->
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(Background).padding(innerPadding),
@@ -201,12 +202,54 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Clickable avatar — tap to open gallery picker
                         Box(
-                            modifier = Modifier.size(64.dp).clip(CircleShape)
-                                .background(SurfaceVariant),
+                            modifier = Modifier
+                                .size(72.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF1A3A4A))
+                                .clickable { galleryLauncher.launch("image/*") },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Person, contentDescription = null, tint = OnSurface, modifier = Modifier.size(32.dp))
+                            val fullUrl = avatarUrl?.let { baseUrl + it }
+                            if (fullUrl != null) {
+                                AsyncImage(
+                                    model = fullUrl,
+                                    contentDescription = "Profile avatar",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = "Default avatar",
+                                    modifier = Modifier.size(40.dp),
+                                    tint = Primary
+                                )
+                            }
+                            if (isUploading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(32.dp),
+                                    color = Primary,
+                                    strokeWidth = 3.dp
+                                )
+                            }
+                            // Camera badge in bottom-right corner
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(22.dp)
+                                    .clip(CircleShape)
+                                    .background(Primary),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.CameraAlt,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
                         }
                         Spacer(Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -224,14 +267,33 @@ fun SettingsScreen(
                         }
                     }
                     Spacer(Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = { showEditProfileDialog = true },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Primary),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
-                    ) {
-                        Text("Edit Profile", color = Primary, fontSize = 13.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { showEditProfileDialog = true },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Primary),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                        ) {
+                            Text("Edit Profile", color = Primary, fontSize = 13.sp)
+                        }
+                        // Navigate to Change Password screen
+                        OutlinedButton(
+                            onClick = { navController.navigate(NavRoutes.ChangePassword.route) },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Outline),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = Primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("Change Password", color = Primary, fontSize = 13.sp)
+                        }
                     }
                 }
             }

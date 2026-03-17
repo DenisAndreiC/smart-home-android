@@ -25,7 +25,8 @@ data class UserResponse(
     val username: String,
     val email: String,
     @SerializedName("display_name") val display_name: String?,
-    @SerializedName("created_at") val created_at: String
+    @SerializedName("avatar_url")   val avatar_url: String?,
+    @SerializedName("created_at")   val created_at: String
 )
 
 // ── Rooms ─────────────────────────────────────────────────────────────────────
@@ -142,6 +143,19 @@ data class NotificationResponse(
 
 data class UpdateUserRequest(
     @SerializedName("display_name") val display_name: String
+)
+
+data class ChangePasswordRequest(
+    @SerializedName("current_password") val current_password: String,
+    @SerializedName("new_password")     val new_password: String
+)
+
+data class ForgotPasswordRequest(
+    val email: String
+)
+
+data class MessageResponse(
+    val message: String
 )
 
 // ── Stats ──────────────────────────────────────────────────────────────────────

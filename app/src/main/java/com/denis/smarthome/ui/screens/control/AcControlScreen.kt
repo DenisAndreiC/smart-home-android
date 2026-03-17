@@ -68,13 +68,6 @@ fun AcControlScreen(
     val fanSpeed by viewModel.fanSpeed.collectAsState()
     val swingEnabled by viewModel.swingEnabled.collectAsState()
     val timerHours by viewModel.timerHours.collectAsState()
-    val error by viewModel.error.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(error) {
-        error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
-    }
-
     // Mapare viteza ventilator -> progres bara liniara (LOW=25%, MED=50%, HIGH=75%, AUTO=100%)
     val fanSpeeds = FanSpeed.values()
     val fanSpeedProgress = mapOf(
@@ -85,8 +78,7 @@ fun AcControlScreen(
     )
 
     Scaffold(
-        containerColor = Background,
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        containerColor = Background
     ) { innerPadding ->
         Column(
             modifier = Modifier

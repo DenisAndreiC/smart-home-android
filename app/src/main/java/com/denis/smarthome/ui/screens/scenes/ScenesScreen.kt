@@ -11,8 +11,6 @@
 package com.denis.smarthome.ui.screens.scenes
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -89,22 +87,10 @@ fun ScenesScreen(
 ) {
     val scenes          by viewModel.scenes.collectAsState()
     val isLoading       by viewModel.isLoading.collectAsState()
-    val error           by viewModel.error.collectAsState()
-    val executeMessage  by viewModel.executeMessage.collectAsState()
     val executingId     by viewModel.executingSceneId.collectAsState()
 
-    val snackbarHostState = remember { SnackbarHostState() }
     // sceneToDelete retine scena selectata pentru confirmare inainte de stergere
     var sceneToDelete by remember { mutableStateOf<SceneResponse?>(null) }
-
-    // Afiseaza eroarea in snackbar si reseteaza starea din ViewModel
-    LaunchedEffect(error) {
-        error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
-    }
-    // Afiseaza mesajul de confirmare executie in snackbar
-    LaunchedEffect(executeMessage) {
-        executeMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearMessage() }
-    }
 
     // Dialog de confirmare stergere scena — apare doar cand sceneToDelete != null
     sceneToDelete?.let { scene ->
@@ -126,7 +112,6 @@ fun ScenesScreen(
 
     Scaffold(
         containerColor = Background,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         // FAB pentru navigare catre editorul de scene (creare noua)
         floatingActionButton = {
             FloatingActionButton(

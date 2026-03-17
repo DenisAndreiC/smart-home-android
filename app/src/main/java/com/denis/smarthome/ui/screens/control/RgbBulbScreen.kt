@@ -66,18 +66,11 @@ fun RgbBulbScreen(
     val selectedColor  by viewModel.selectedColor.collectAsState()
     val selectedAngle  by viewModel.selectedAngle.collectAsState()
     val selectedPreset by viewModel.selectedPreset.collectAsState()
-    val error          by viewModel.error.collectAsState()
 
-    val snackbarHostState = remember { SnackbarHostState() }
     var showMenu by remember { mutableStateOf(false) }
 
-    LaunchedEffect(error) {
-        error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
-    }
-
     Scaffold(
-        containerColor = Background,
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        containerColor = Background
     ) { innerPadding ->
         Column(
             modifier = Modifier

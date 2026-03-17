@@ -46,7 +46,6 @@ import com.denis.smarthome.viewmodel.DevicesViewModel
  * Ecranul principal de gestiune a dispozitivelor.
  *
  * Colecteaza starea din [DevicesViewModel] si afiseaza lista filtrata.
- * Erorile sunt afisate printr-un [SnackbarHost] folosind [LaunchedEffect].
  *
  * @param navController Controlerul de navigare Compose
  * @param viewModel ViewModel-ul care gestioneaza lista si filtrele dispozitivelor
@@ -59,7 +58,6 @@ fun DevicesListScreen(
 ) {
     val filteredDevices by viewModel.filteredDevices.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val error by viewModel.error.collectAsState()
     val selectedFilter by viewModel.selectedFilter.collectAsState()
     val selectedRoom by viewModel.selectedRoom.collectAsState()
     val rooms by viewModel.rooms.collectAsState()
@@ -106,18 +104,8 @@ fun DevicesListScreen(
         )
     }
 
-    // LaunchedEffect asculta eroarea: cand apare una, o afiseaza in Snackbar si o sterge din VM
-    val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(error) {
-        error?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.clearError()
-        }
-    }
-
     Scaffold(
-        containerColor = Background,
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        containerColor = Background
     ) { innerPadding ->
         Column(
             modifier = Modifier

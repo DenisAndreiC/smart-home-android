@@ -60,16 +60,9 @@ fun TvRemoteScreen(
     )
     val isOn by viewModel.isOn.collectAsState()
     val isMuted by viewModel.isMuted.collectAsState()
-    val error by viewModel.error.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(error) {
-        error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
-    }
 
     Scaffold(
-        containerColor = Background,
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        containerColor = Background
     ) { innerPadding ->
         Column(
             modifier = Modifier
