@@ -62,11 +62,39 @@ fun LampControlScreen(
     val viewModel: LampControlViewModel = viewModel(
         factory = LampControlViewModel.Factory(app, deviceId)
     )
-    val isOn      by viewModel.isOn.collectAsState()
-    val schedules by viewModel.schedules.collectAsState()
+    val isOn       by viewModel.isOn.collectAsState()
+    val schedules  by viewModel.schedules.collectAsState()
+    val isDeleted  by viewModel.isDeleted.collectAsState()
 
-    var showMenu by remember { mutableStateOf(false) }
+    var showMenu              by remember { mutableStateOf(false) }
     var showAddScheduleDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog      by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isDeleted) {
+        if (isDeleted) navController.popBackStack()
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            containerColor = Surface,
+            titleContentColor = OnBackground,
+            textContentColor = OnSurface,
+            title = { Text("Delete Device", fontWeight = FontWeight.Bold) },
+            text = { Text("Delete \"${device.name}\"? This cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = { showDeleteDialog = false; viewModel.deleteDevice() },
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorColor)
+                ) { Text("Delete", color = Color.White, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel", color = OnSurface)
+                }
+            }
+        )
+    }
 
     if (showAddScheduleDialog) {
         AddScheduleDialog(
@@ -123,7 +151,7 @@ fun LampControlScreen(
                         )
                         DropdownMenuItem(
                             text = { Text("Delete", color = ErrorColor) },
-                            onClick = { showMenu = false }
+                            onClick = { showMenu = false; showDeleteDialog = true }
                         )
                     }
                 }

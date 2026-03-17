@@ -312,7 +312,9 @@ private fun AddDeviceDialog(
 ) {
     var typeExpanded by remember { mutableStateOf(false) }
     var brandExpanded by remember { mutableStateOf(false) }
+    var remoteTypeExpanded by remember { mutableStateOf(false) }
     val deviceTypes = listOf("ir_tv", "ir_ac", "ir_rgb", "relay", "wol")
+    val remoteTypes = listOf("44-key", "24-key")
     val tvBrands = listOf("Philips", "Samsung", "LG", "Sony", "Panasonic", "NEC")
 
     AlertDialog(
@@ -385,7 +387,7 @@ private fun AddDeviceDialog(
                     }
                 }
 
-                // Dropdown Brand — vizibil doar pentru ir_tv
+                // Dropdown Brand — visible only for ir_tv
                 if (form.deviceType == "ir_tv") {
                     ExposedDropdownMenuBox(
                         expanded = brandExpanded,
@@ -414,6 +416,41 @@ private fun AddDeviceDialog(
                                     onClick = {
                                         onFormChange(form.copy(brand = brand))
                                         brandExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Dropdown Remote Type — visible only for ir_rgb
+                if (form.deviceType == "ir_rgb") {
+                    ExposedDropdownMenuBox(
+                        expanded = remoteTypeExpanded,
+                        onExpandedChange = { remoteTypeExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = form.remoteType,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Remote Type") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = remoteTypeExpanded) },
+                            colors = fieldColors,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = remoteTypeExpanded,
+                            onDismissRequest = { remoteTypeExpanded = false },
+                            modifier = Modifier.background(Surface)
+                        ) {
+                            remoteTypes.forEach { rt ->
+                                DropdownMenuItem(
+                                    text = { Text(rt, color = OnBackground) },
+                                    onClick = {
+                                        onFormChange(form.copy(remoteType = rt))
+                                        remoteTypeExpanded = false
                                     }
                                 )
                             }

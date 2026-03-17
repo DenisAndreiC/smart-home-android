@@ -154,8 +154,14 @@ class AuthRepository(
         apiService.uploadAvatar(part)
     }
 
-    suspend fun changePassword(current: String, new: String): Result<MessageResponse> = runCatching {
-        apiService.changePassword(ChangePasswordRequest(current, new))
+    suspend fun changePassword(current: String, new: String): Result<MessageResponse> {
+        return try {
+            Result.success(apiService.changePassword(ChangePasswordRequest(current, new)))
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseHttpError(e)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     suspend fun forgotPassword(email: String): Result<MessageResponse> = runCatching {

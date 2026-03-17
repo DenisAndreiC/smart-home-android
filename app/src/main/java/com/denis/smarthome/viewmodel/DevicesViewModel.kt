@@ -48,7 +48,8 @@ data class AddDeviceFormState(
     val deviceType: String = "relay",
     val room: String = "",
     val mqttTopic: String = "smarthome/devices/relay/command",
-    val brand: String = ""
+    val brand: String = "",
+    val remoteType: String = "44-key"
 )
 
 /**
@@ -207,6 +208,8 @@ class DevicesViewModel(application: Application) : AndroidViewModel(application)
         val mqtt = if (isIr) "smarthome/devices/ir/command" else "smarthome/devices/relay/command"
         val irCodes = if (isIr && form.brand.isNotBlank())
             mapOf("brand" to form.brand.lowercase()) else null
+        val irRemoteType = if (form.deviceType == "ir_rgb" && form.remoteType.isNotBlank())
+            form.remoteType.substringBefore("-") else null
         viewModelScope.launch {
             repository.createDevice(
                 DeviceRequest(
@@ -214,7 +217,8 @@ class DevicesViewModel(application: Application) : AndroidViewModel(application)
                     device_type = form.deviceType,
                     room = form.room.ifBlank { "Default" },
                     mqtt_topic = mqtt,
-                    ir_codes = irCodes
+                    ir_codes = irCodes,
+                    ir_remote_type = irRemoteType
                 )
             ).onSuccess {
                 if (form.deviceType == "ir_tv" && form.brand.isNotBlank()) {

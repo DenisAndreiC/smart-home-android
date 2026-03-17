@@ -44,10 +44,11 @@ data class RoomResponse(
 
 data class DeviceRequest(
     val name: String,
-    @SerializedName("device_type") val device_type: String,
+    @SerializedName("device_type")     val device_type: String,
     val room: String? = null,
-    @SerializedName("mqtt_topic")  val mqtt_topic: String? = null,
-    @SerializedName("ir_codes")    val ir_codes: Map<String, String>? = null
+    @SerializedName("mqtt_topic")      val mqtt_topic: String? = null,
+    @SerializedName("ir_codes")        val ir_codes: Map<String, String>? = null,
+    @SerializedName("ir_remote_type")  val ir_remote_type: String? = null
 )
 
 data class DeviceResponse(
@@ -60,8 +61,9 @@ data class DeviceResponse(
     @SerializedName("is_online")    val is_online: Boolean,
     @SerializedName("last_status")  val last_status: String?,
     @SerializedName("mac_address")  val mac_address: String?,
-    @SerializedName("ir_codes")     val ir_codes: String?,
-    @SerializedName("owner_id")     val owner_id: Int,
+    @SerializedName("ir_codes")        val ir_codes: String?,
+    @SerializedName("ir_remote_type")  val ir_remote_type: String?,
+    @SerializedName("owner_id")        val owner_id: Int,
     @SerializedName("created_at")   val created_at: String
 )
 

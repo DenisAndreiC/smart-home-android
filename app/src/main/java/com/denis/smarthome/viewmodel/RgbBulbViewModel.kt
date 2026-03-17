@@ -221,6 +221,17 @@ class RgbBulbViewModel(
     /** Sterge mesajul de eroare curent. */
     fun clearError() { _error.value = null }
 
+    private val _isDeleted = MutableStateFlow(false)
+    val isDeleted: StateFlow<Boolean> = _isDeleted.asStateFlow()
+
+    fun deleteDevice() {
+        viewModelScope.launch {
+            repository.deleteDevice(deviceId)
+                .onSuccess { _isDeleted.value = true }
+                .onFailure { _error.value = it.message }
+        }
+    }
+
     /**
      * Factory pentru injectarea [deviceId] fara framework DI.
      *
