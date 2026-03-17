@@ -39,9 +39,12 @@ object RetrofitClient {
     // (ex: "http://192.168.1.100:8000/") sau un DNS dinamic.
     // Use "http://10.0.2.2:8000/" for Android Emulator
     // Use "http://192.168.x.x:8000/" for physical device (replace with your Mac's IP)
-    const val BASE_URL = "http://10.0.2.2:8000/api/"
+    const val EMULATOR_URL = "http://10.0.2.2:8000/api/"
+    const val DEVICE_URL   = "http://192.168.100.184:8000/api/"
 
-    // tokenManager si _apiService sunt null pana la apelul init()
+    var BASE_URL = EMULATOR_URL
+        private set
+
     private var tokenManager: TokenManager? = null
     private var _apiService: ApiService? = null
 
@@ -63,6 +66,15 @@ object RetrofitClient {
      */
     val apiService: ApiService
         get() = _apiService ?: error("RetrofitClient not initialized. Call RetrofitClient.init() first.")
+
+    /**
+     * Schimba URL-ul backend-ului si reconstruieste Retrofit.
+     * Util pentru a comuta intre emulator (10.0.2.2) si dispozitiv fizic (IP local).
+     */
+    fun updateBaseUrl(url: String) {
+        BASE_URL = url
+        tokenManager?.let { _apiService = buildApiService(it) }
+    }
 
     /**
      * Construieste si configureaza instanta [ApiService] cu OkHttpClient personalizat.
@@ -112,7 +124,7 @@ object RetrofitClient {
         // - GsonConverterFactory: serializeaza/deserializeaza automat JSON <-> data class
         // - client OkHttp personalizat cu interceptorii configurati mai sus
         return Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(BASE_URL) // foloseste BASE_URL curent (poate fi schimbat prin updateBaseUrl)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

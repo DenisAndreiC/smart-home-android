@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -59,7 +60,7 @@ fun AcControlScreen(
 ) {
     val app = LocalContext.current.applicationContext as Application
     val viewModel: AcControlViewModel = viewModel(
-        factory = AcControlViewModel.Factory(app, deviceId)
+        factory = AcControlViewModel.Factory(app, deviceId, device.last_status)
     )
     val isOn by viewModel.isOn.collectAsState()
     val temperature by viewModel.temperature.collectAsState()
@@ -106,7 +107,7 @@ fun AcControlScreen(
                     onClick = { navController.popBackStack() },
                     modifier = Modifier.align(Alignment.CenterStart)
                 ) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = OnSurface)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = OnSurface)
                 }
                 Column(modifier = Modifier.align(Alignment.Center)) {
                     Text(
@@ -116,7 +117,7 @@ fun AcControlScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = device.room,
+                        text = device.room ?: "",
                         color = OnSurface,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -350,3 +351,5 @@ fun AcControlScreen(
         }
     }
 }
+
+

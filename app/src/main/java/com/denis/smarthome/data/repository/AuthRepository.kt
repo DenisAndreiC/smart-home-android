@@ -143,8 +143,8 @@ class AuthRepository(
         tokenManager.clearToken()
     }
 
-    suspend fun updateUser(username: String): Result<UserResponse> = runCatching {
-        apiService.updateUser(UpdateUserRequest(username))
+    suspend fun updateUser(displayName: String): Result<UserResponse> = runCatching {
+        apiService.updateUser(UpdateUserRequest(displayName))
     }
 
     suspend fun uploadAvatar(part: MultipartBody.Part): Result<UserResponse> = runCatching {

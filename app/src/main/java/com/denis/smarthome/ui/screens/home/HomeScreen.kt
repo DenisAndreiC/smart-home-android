@@ -16,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -68,6 +69,8 @@ fun HomeScreen(
     val snackbarMessage by viewModel.snackbarMessage.collectAsState()
     val unreadCount by viewModel.unreadNotificationCount.collectAsState()
     val energyKwh by viewModel.energyKwh.collectAsState()
+    val scenes by viewModel.scenes.collectAsState()
+    val executingSceneId by viewModel.executingSceneId.collectAsState()
 
     val greeting = viewModel.greeting
     val currentDate = viewModel.currentDate
@@ -236,6 +239,9 @@ fun HomeScreen(
                     }
 
                     // ── Quick Actions ──
+                    // First chip is always "All Off" (hardcoded).
+                    // The rest are the user's scenes fetched from GET /api/scenes/,
+                    // each calling POST /api/scenes/{id}/execute on tap.
                     item {
                         Spacer(modifier = Modifier.height(16.dp))
                         SectionTitle(title = "Quick Actions")
@@ -243,6 +249,7 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
+                            // Hardcoded "All Off" chip — always first
                             item {
                                 QuickActionChip(
                                     label = "All Off",
@@ -254,37 +261,23 @@ fun HomeScreen(
                                     }
                                 )
                             }
-                            item {
+                            // Dynamic chips: one per user scene, icon derived from scene name
+                            items(scenes, key = { it.id }) { scene ->
+                                val n = scene.name.lowercase()
+                                val sceneIcon = when {
+                                    n.contains("movie") || n.contains("cinema") -> Icons.Default.Movie
+                                    n.contains("morning") || n.contains("wake") -> Icons.Default.WbSunny
+                                    n.contains("away") -> Icons.Default.DirectionsRun
+                                    n.contains("night") || n.contains("sleep") || n.contains("bed") -> Icons.Default.DarkMode
+                                    n.contains("party") -> Icons.Default.MusicNote
+                                    n.contains("work") || n.contains("office") -> Icons.Default.Computer
+                                    else -> Icons.Default.AutoAwesome
+                                }
                                 QuickActionChip(
-                                    label = "Movie Mode",
-                                    icon = Icons.Default.Movie,
-                                    isActive = activeChipIndex == 1,
-                                    onClick = {
-                                        activeChipIndex = if (activeChipIndex == 1) -1 else 1
-                                        Log.d("HomeScreen", "Movie Mode triggered")
-                                    }
-                                )
-                            }
-                            item {
-                                QuickActionChip(
-                                    label = "Good Night",
-                                    icon = Icons.Default.DarkMode,
-                                    isActive = activeChipIndex == 2,
-                                    onClick = {
-                                        activeChipIndex = if (activeChipIndex == 2) -1 else 2
-                                        Log.d("HomeScreen", "Good Night triggered")
-                                    }
-                                )
-                            }
-                            item {
-                                QuickActionChip(
-                                    label = "Away",
-                                    icon = Icons.Default.DirectionsRun,
-                                    isActive = activeChipIndex == 3,
-                                    onClick = {
-                                        activeChipIndex = if (activeChipIndex == 3) -1 else 3
-                                        viewModel.awayMode()
-                                    }
+                                    label = scene.name,
+                                    icon = sceneIcon,
+                                    isActive = executingSceneId == scene.id,
+                                    onClick = { viewModel.executeQuickScene(scene.id) }
                                 )
                             }
                         }

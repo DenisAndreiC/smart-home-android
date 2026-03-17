@@ -17,6 +17,7 @@ import androidx.lifecycle.viewModelScope
 import com.denis.smarthome.data.api.RetrofitClient
 import com.denis.smarthome.data.local.TokenManager
 import com.denis.smarthome.data.model.DashboardStats
+import com.denis.smarthome.data.model.SceneResponse
 import com.denis.smarthome.data.model.UserResponse
 import com.denis.smarthome.data.repository.AuthRepository
 import com.denis.smarthome.data.repository.DashboardRepository
@@ -88,6 +89,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // Estimated daily energy consumption in kWh based on active devices
     private val _energyKwh = MutableStateFlow(0.0)
     val energyKwh: StateFlow<Double> = _energyKwh.asStateFlow()
+
+    // User scenes loaded from GET /api/scenes/ — shown as Quick Action chips in dashboard
+    private val _scenes = MutableStateFlow<List<SceneResponse>>(emptyList())
+    val scenes: StateFlow<List<SceneResponse>> = _scenes.asStateFlow()
+
+    // ID of scene currently executing — used for chip loading state
+    private val _executingSceneId = MutableStateFlow<Int?>(null)
+    val executingSceneId: StateFlow<Int?> = _executingSceneId.asStateFlow()
 
     /**
      * Salut dinamic calculat in functie de ora curenta din [Calendar].
@@ -174,6 +183,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     _unreadNotificationCount.value = notifications.count { !it.is_read }
                 }
 
+            // Load user scenes for Quick Actions chips
+            runCatching { RetrofitClient.apiService.getScenes() }
+                .onSuccess { _scenes.value = it }
+
             _isLoading.value = false
         }
     }
@@ -204,6 +217,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Sterge mesajul de snackbar dupa ce a fost afisat. */
+    /**
+     * Executes a scene via POST /api/scenes/{id}/execute and shows snackbar result.
+     *
+     * Sets [_executingSceneId] while the request is in flight so the chip can show
+     * a loading state, then clears it regardless of success or failure.
+     *
+     * @param id scene ID to execute
+     */
+    fun executeQuickScene(id: Int) {
+        viewModelScope.launch {
+            _executingSceneId.value = id
+            runCatching { RetrofitClient.apiService.executeScene(id) }
+                .onSuccess { resp -> _snackbarMessage.value = resp["message"] ?: "Scene executed" }
+                .onFailure { _snackbarMessage.value = "Error: ${it.message}" }
+            _executingSceneId.value = null
+        }
+    }
+
+    /** Clears the snackbar message after it has been displayed. */
     fun clearSnackbar() { _snackbarMessage.value = null }
 }

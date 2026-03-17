@@ -100,7 +100,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             _isLoading.value = true
             authRepo.getMe()
                 .onSuccess {
-                    _userName.value = it.username
+                    // Prefer display_name when set; fall back to username
+                    _userName.value = it.display_name?.takeIf { n -> n.isNotBlank() } ?: it.username
                     _userEmail.value = it.email
                     // Conexiunea cu serverul este confirmata - cererea a reusit
                     _isServerConnected.value = true
@@ -143,10 +144,29 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { authRepo.logout() }
     }
 
-    fun updateUsername(newUsername: String) {
+    private val _profileMessage = MutableStateFlow<String?>(null)
+    val profileMessage: StateFlow<String?> = _profileMessage.asStateFlow()
+
+    /**
+     * Sends PUT /api/users/me with the new display_name, then re-fetches the profile
+     * so the displayed name reflects what was actually persisted on the server.
+     *
+     * @param newDisplayName the value to store as display_name
+     */
+    fun updateUsername(newDisplayName: String) {
         viewModelScope.launch {
-            authRepo.updateUser(newUsername)
-                .onSuccess { _userName.value = it.username }
+            authRepo.updateUser(newDisplayName)
+                .onSuccess {
+                    // Update name immediately from the response
+                    _userName.value = it.display_name?.takeIf { n -> n.isNotBlank() } ?: it.username
+                    _profileMessage.value = "Profile updated"
+                    // Re-fetch to confirm persistence
+                    loadUserInfo()
+                }
+                .onFailure { _profileMessage.value = "Error: ${it.message}" }
         }
     }
+
+    /** Clears the profile update snackbar message after it has been shown. */
+    fun clearProfileMessage() { _profileMessage.value = null }
 }

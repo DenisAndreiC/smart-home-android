@@ -24,6 +24,7 @@ data class UserResponse(
     val id: Int,
     val username: String,
     val email: String,
+    @SerializedName("display_name") val display_name: String?,
     @SerializedName("created_at") val created_at: String
 )
 
@@ -140,7 +141,7 @@ data class NotificationResponse(
 // ── Users ──────────────────────────────────────────────────────────────────────
 
 data class UpdateUserRequest(
-    val username: String
+    @SerializedName("display_name") val display_name: String
 )
 
 // ── Stats ──────────────────────────────────────────────────────────────────────

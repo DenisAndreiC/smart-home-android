@@ -43,6 +43,7 @@ fun SettingsScreen(
     val darkTheme         by viewModel.darkTheme.collectAsState()
     val notifications     by viewModel.notifications.collectAsState()
     val lastSyncTime      by viewModel.lastSyncTime.collectAsState()
+    val profileMessage    by viewModel.profileMessage.collectAsState()
 
     var showLogoutDialog      by remember { mutableStateOf(false) }
     var showUrlDialog         by remember { mutableStateOf(false) }
@@ -50,9 +51,19 @@ fun SettingsScreen(
     var showTosDialog         by remember { mutableStateOf(false) }
     var newUsernameInput      by remember { mutableStateOf("") }
 
-    // Pre-fill username input when dialog opens
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Pre-fill display name input when dialog opens
     LaunchedEffect(showEditProfileDialog) {
         if (showEditProfileDialog) newUsernameInput = userName
+    }
+
+    // Show profile update result in snackbar
+    LaunchedEffect(profileMessage) {
+        profileMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearProfileMessage()
+        }
     }
 
     // Logout confirmation
@@ -93,7 +104,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = newUsernameInput,
                         onValueChange = { newUsernameInput = it },
-                        label = { Text("Username") },
+                        label = { Text("Display Name") },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Primary,
@@ -161,8 +172,12 @@ fun SettingsScreen(
         )
     }
 
+    Scaffold(
+        containerColor = Background,
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { innerPadding ->
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Background),
+        modifier = Modifier.fillMaxSize().background(Background).padding(innerPadding),
         contentPadding = PaddingValues(bottom = 32.dp)
     ) {
         // ── Header ────────────────────────────────────────────────────────────
@@ -368,7 +383,8 @@ fun SettingsScreen(
                 Text("Logout", color = ErrorColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
-    }
+    } // end LazyColumn
+    } // end Scaffold
 }
 
 @Composable

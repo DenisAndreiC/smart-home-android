@@ -115,7 +115,7 @@ class LampControlViewModel(
                 .onSuccess { devices ->
                     _device.value = devices.find { it.id == deviceId }
                     // Sincronizam starea locala cu starea reala a dispozitivului
-                    _isOn.value = _device.value?.is_active ?: false
+                    _isOn.value = _device.value?.is_online ?: false
                 }
                 .onFailure { _error.value = it.message }
             _isLoading.value = false
@@ -135,8 +135,8 @@ class LampControlViewModel(
             repository.sendCommand(
                 CommandRequest(
                     device_id = deviceId,
-                    command_type = "power",
-                    command_data = if (_isOn.value) "on" else "off"
+                    action = "power",
+                    value = if (_isOn.value) "on" else "off"
                 )
             ).onFailure {
                 // Revert: restauram starea anterioara daca API-ul a esuat

@@ -128,7 +128,7 @@ class RgbBulbViewModel(
                 .onSuccess { devices ->
                     _device.value = devices.find { it.id == deviceId }
                     // Sincronizam starea locala cu starea reala din API
-                    _isOn.value = _device.value?.is_active ?: false
+                    _isOn.value = _device.value?.is_online ?: false
                 }
                 .onFailure { _error.value = it.message }
             _isLoading.value = false
@@ -213,7 +213,7 @@ class RgbBulbViewModel(
     private fun sendCommand(type: String, data: String) {
         viewModelScope.launch {
             repository.sendCommand(
-                CommandRequest(device_id = deviceId, command_type = type, command_data = data)
+                CommandRequest(device_id = deviceId, action = type, value = data)
             ).onFailure { _error.value = it.message }
         }
     }

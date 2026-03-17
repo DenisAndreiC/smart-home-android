@@ -29,6 +29,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.denis.smarthome.ui.components.DeviceListItem
@@ -64,6 +67,44 @@ fun DevicesListScreen(
     val addForm by viewModel.addForm.collectAsState()
 
     var showRoomDropdown by remember { mutableStateOf(false) }
+    var deviceToDelete by remember { mutableStateOf<Int?>(null) }
+
+    // Reload devices when this screen becomes active again (e.g. navigating back
+    // from TvRemoteScreen after sending a power command) so last_status is fresh.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.loadDevices()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Dialog confirmare stergere dispozitiv
+    if (deviceToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { deviceToDelete = null },
+            containerColor = Surface,
+            titleContentColor = OnBackground,
+            textContentColor = OnSurface,
+            title = { Text("Delete Device", fontWeight = FontWeight.Bold) },
+            text = { Text("Are you sure you want to delete this device?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteDevice(deviceToDelete!!)
+                        deviceToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorColor)
+                ) { Text("Delete", color = Color.White, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deviceToDelete = null }) {
+                    Text("Cancel", color = OnSurface)
+                }
+            }
+        )
+    }
 
     // LaunchedEffect asculta eroarea: cand apare una, o afiseaza in Snackbar si o sterge din VM
     val snackbarHostState = remember { SnackbarHostState() }
@@ -237,7 +278,8 @@ fun DevicesListScreen(
                                 onToggle = { isOn -> viewModel.toggleDevice(device.id, isOn) },
                                 onClick = {
                                     navController.navigate(NavRoutes.DeviceControl.createRoute(device.id))
-                                }
+                                },
+                                onDelete = { deviceToDelete = device.id }
                             )
                         }
                     }
@@ -281,8 +323,9 @@ private fun AddDeviceDialog(
     onDismiss: () -> Unit
 ) {
     var typeExpanded by remember { mutableStateOf(false) }
-    // Tipurile de dispozitive suportate de backend
-    val deviceTypes = listOf("relay", "ir", "wol")
+    var brandExpanded by remember { mutableStateOf(false) }
+    val deviceTypes = listOf("ir_tv", "ir_ac", "ir_rgb", "relay", "wol")
+    val tvBrands = listOf("Philips", "Samsung", "LG", "Sony", "Panasonic", "NEC")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -317,8 +360,7 @@ private fun AddDeviceDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // ExposedDropdownMenuBox afiseaza un camp read-only cu meniu expandabil
-                // pentru selectarea tipului dispozitivului (relay / ir / wol)
+                // Dropdown Device Type
                 ExposedDropdownMenuBox(
                     expanded = typeExpanded,
                     onExpandedChange = { typeExpanded = it }
@@ -341,12 +383,52 @@ private fun AddDeviceDialog(
                     ) {
                         deviceTypes.forEach { type ->
                             DropdownMenuItem(
-                                text = { Text(type.uppercase(), color = OnBackground) },
+                                text = { Text(type, color = OnBackground) },
                                 onClick = {
-                                    onFormChange(form.copy(deviceType = type))
+                                    val newTopic = if (type.startsWith("ir"))
+                                        "smarthome/devices/ir/command"
+                                    else
+                                        "smarthome/devices/relay/command"
+                                    onFormChange(form.copy(deviceType = type, mqttTopic = newTopic, brand = ""))
                                     typeExpanded = false
                                 }
                             )
+                        }
+                    }
+                }
+
+                // Dropdown Brand — vizibil doar pentru ir_tv
+                if (form.deviceType == "ir_tv") {
+                    ExposedDropdownMenuBox(
+                        expanded = brandExpanded,
+                        onExpandedChange = { brandExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = form.brand,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Brand") },
+                            placeholder = { Text("Select brand") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = brandExpanded) },
+                            colors = fieldColors,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = brandExpanded,
+                            onDismissRequest = { brandExpanded = false },
+                            modifier = Modifier.background(Surface)
+                        ) {
+                            tvBrands.forEach { brand ->
+                                DropdownMenuItem(
+                                    text = { Text(brand, color = OnBackground) },
+                                    onClick = {
+                                        onFormChange(form.copy(brand = brand))
+                                        brandExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -361,14 +443,6 @@ private fun AddDeviceDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                OutlinedTextField(
-                    value = form.mqttTopic,
-                    onValueChange = { onFormChange(form.copy(mqttTopic = it)) },
-                    label = { Text("MQTT Topic") },
-                    singleLine = true,
-                    colors = fieldColors,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
         },
         confirmButton = {

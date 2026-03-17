@@ -20,6 +20,7 @@ import com.denis.smarthome.data.repository.DeviceRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import android.util.Log
 import kotlinx.coroutines.launch
 
 /**
@@ -68,21 +69,33 @@ class TvRemoteViewModel(
      * @param command numele comenzii IR (ex: "power", "vol_up", "mute", "ok")
      */
     fun sendCommand(command: String) {
+        // Mapeaza comenzile scurte (din UI) la actiunile acceptate de backend
+        val action = when (command) {
+            "vol_up"   -> "volume_up"
+            "vol_down" -> "volume_down"
+            "ch_up"    -> "channel_up"
+            "ch_down"  -> "channel_down"
+            "up"       -> "nav_up"
+            "down"     -> "nav_down"
+            "left"     -> "nav_left"
+            "right"    -> "nav_right"
+            else       -> command  // power, mute, ok, back, menu, source
+        }
         viewModelScope.launch {
-            // Actualizam starea locala pentru comenzile care au toggle logic
             when (command) {
                 "power" -> _isOn.value = !_isOn.value
-                "mute" -> _isMuted.value = !_isMuted.value
+                "mute"  -> _isMuted.value = !_isMuted.value
             }
-            // Notificam UI-ul ca o comanda a fost trimisa (pentru feedback vizual)
             _commandSent.value = command
+            Log.d("TvRemote", "sendCommand: device=$deviceId action=$action")
             repository.sendCommand(
-                CommandRequest(
-                    device_id = deviceId,
-                    command_type = "ir",    // Toate comenzile TV sunt de tip IR
-                    command_data = command  // Numele comenzii devine payload-ul IR
-                )
-            ).onFailure { _error.value = it.message }
+                CommandRequest(device_id = deviceId, action = action, value = null)
+            ).onSuccess {
+                Log.d("TvRemote", "command OK: ${it.message}")
+            }.onFailure {
+                Log.e("TvRemote", "command FAILED: ${it.message}")
+                _error.value = it.message
+            }
         }
     }
 
