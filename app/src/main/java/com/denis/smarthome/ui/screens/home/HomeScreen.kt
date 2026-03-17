@@ -37,25 +37,23 @@ import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.HomeViewModel
 import com.denis.smarthome.viewmodel.RoomInfo
 
-// Lista de palete gradient pentru cardurile de camera (ciclic, cate una pe slot).
-// Fiecare pereche merge de la o culoare inchisa tematica spre culoarea Background,
-// creand un efect de adancime vizuala diferit per camera.
 private val roomGradients = listOf(
-    listOf(Color(0xFF0D3545), Background),  // teal-dark (Living)
-    listOf(Color(0xFF2A1535), Background),  // purple-dark (Bedroom)
-    listOf(Color(0xFF2A1F0D), Background),  // amber-dark (Kitchen)
-    listOf(Color(0xFF0D2A1A), Background),  // green-dark
-    listOf(Color(0xFF2A0D0D), Background),  // red-dark
+    listOf(Color(0xFF0D3545), Background),
+    listOf(Color(0xFF2A1535), Background),
+    listOf(Color(0xFF2A1F0D), Background),
+    listOf(Color(0xFF0D2A1A), Background),
+    listOf(Color(0xFF2A0D0D), Background),
 )
 
 /**
  * Ecranul principal cu dashboard-ul SmartHome.
  *
- * Foloseste [PullToRefreshBox] pentru a permite utilizatorului sa reimprospateze
- * datele prin gestul de tragere in jos. Continutul principal este un [LazyColumn]
- * cu sectiunile: header salut, statistici, actiuni rapide si grid camere.
+ * Foloseste [PullToRefreshBox] pentru tragere in jos (refresh). Continutul este un
+ * [LazyColumn] cu: header salut, statistici reale din API, actiuni rapide cu efecte
+ * (allOff/awayMode) si grid 2x2 camere derivate din dispozitive.
+ * Snackbar-ul este conectat la [HomeViewModel.snackbarMessage].
  *
- * @param navController Controlerul de navigare Compose
+ * @param navController controlerul de navigare Compose
  * @param viewModel ViewModel-ul care furnizeaza datele dashboard-ului
  */
 @Composable
@@ -67,6 +65,9 @@ fun HomeScreen(
     val rooms by viewModel.rooms.collectAsState()
     val user by viewModel.user.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val snackbarMessage by viewModel.snackbarMessage.collectAsState()
+    val unreadCount by viewModel.unreadNotificationCount.collectAsState()
+    val energyKwh by viewModel.energyKwh.collectAsState()
 
     val greeting = viewModel.greeting
     val currentDate = viewModel.currentDate
@@ -74,6 +75,15 @@ fun HomeScreen(
 
     var activeChipIndex by remember { mutableStateOf(-1) }
     var showAddRoomDialog by remember { mutableStateOf(false) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(snackbarMessage) {
+        snackbarMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearSnackbar()
+        }
+    }
 
     if (showAddRoomDialog) {
         AlertDialog(
@@ -102,223 +112,230 @@ fun HomeScreen(
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Background)
-    ) {
-        // PullToRefreshBox din M3 experimental: arata indicator de refresh cand isLoading
-        // si apeleaza loadDashboard() cand utilizatorul trage in jos
-        PullToRefreshBox(
-            isRefreshing = isLoading,
-            onRefresh = { viewModel.loadDashboard() },
-            modifier = Modifier.fillMaxSize()
-        ) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 88.dp)
-        ) {
-            // ── Header salut: avatar circular + salut personalizat + data curenta ──
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Surface)
-                        .padding(horizontal = 20.dp, vertical = 18.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Avatar
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(SurfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = OnSurface,
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = if (userName.isNotBlank()) "$greeting, $userName"
-                                       else greeting,
-                                color = OnBackground,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = currentDate,
-                                color = OnSurface,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-
-                    // ── Iconita notificari cu badge rosu de activitate ──
-                    Box {
-                        IconButton(onClick = { }) {
-                            Icon(
-                                imageVector = Icons.Outlined.Notifications,
-                                contentDescription = "Notifications",
-                                tint = Primary
-                            )
-                        }
-                        // Badge
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(ErrorColor)
-                                .align(Alignment.TopEnd)
-                                .offset(x = (-10).dp, y = 10.dp)
-                        )
-                    }
-                }
-            }
-
-            // ── Sectiunea statistici: LazyRow cu StatCard-uri pentru dispozitive, consum, automatizari ──
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                SectionTitle(title = "Statistici")
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    item {
-                        StatCard(
-                            icon = Icons.Default.Devices,
-                            label = "Dispozitive",
-                            value = "${stats?.total_devices ?: 12}",
-                            change = "+2 adăugate"
-                        )
-                    }
-                    item {
-                        StatCard(
-                            icon = Icons.Default.Bolt,
-                            label = "Consum",
-                            value = "4.2 kWh",
-                            change = "+0.5% azi"
-                        )
-                    }
-                    item {
-                        StatCard(
-                            icon = Icons.Default.AutoAwesome,
-                            label = "Automatizări",
-                            value = "${stats?.total_commands_today ?: 5}",
-                            change = "active"
-                        )
-                    }
-                }
-            }
-
-            // ── Sectiunea actiuni rapide: LazyRow cu QuickActionChip-uri pentru scenarii comune ──
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                SectionTitle(title = "Acțiuni Rapide")
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    item {
-                        QuickActionChip(
-                            label = "All Off",
-                            icon = Icons.Default.PowerSettingsNew,
-                            isActive = activeChipIndex == 0,
-                            onClick = {
-                                activeChipIndex = if (activeChipIndex == 0) -1 else 0
-                                Log.d("HomeScreen", "All Off triggered")
-                            }
-                        )
-                    }
-                    item {
-                        QuickActionChip(
-                            label = "Movie Mode",
-                            icon = Icons.Default.Movie,
-                            isActive = activeChipIndex == 1,
-                            onClick = {
-                                activeChipIndex = if (activeChipIndex == 1) -1 else 1
-                                Log.d("HomeScreen", "Movie Mode triggered")
-                            }
-                        )
-                    }
-                    item {
-                        QuickActionChip(
-                            label = "Good Night",
-                            icon = Icons.Default.DarkMode,
-                            isActive = activeChipIndex == 2,
-                            onClick = {
-                                activeChipIndex = if (activeChipIndex == 2) -1 else 2
-                                Log.d("HomeScreen", "Good Night triggered")
-                            }
-                        )
-                    }
-                    item {
-                        QuickActionChip(
-                            label = "Away",
-                            icon = Icons.Default.DirectionsRun,
-                            isActive = activeChipIndex == 3,
-                            onClick = {
-                                activeChipIndex = if (activeChipIndex == 3) -1 else 3
-                                Log.d("HomeScreen", "Away triggered")
-                            }
-                        )
-                    }
-                }
-            }
-
-            // ── Sectiunea camere: grid 2x2 cu RoomCard-uri si un card de adaugare ──
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                SectionTitle(
-                    title = "Camere",
-                    action = {
-                        TextButton(onClick = {
-                            navController.navigate(NavRoutes.Devices.route)
-                        }) {
-                            Text("Toate", color = Primary, style = MaterialTheme.typography.labelLarge)
-                        }
-                    }
-                )
-
-                // Indicator de incarcare centrat cat timp datele se incarca de la API
-                if (isLoading) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(color = Primary)
-                    }
-                } else {
-                    RoomsGrid(
-                        rooms = rooms,
-                        onRoomClick = { navController.navigate(NavRoutes.Devices.route) },
-                        onAddRoomClick = { showAddRoomDialog = true }
-                    )
-                }
-            }
-        }
-        } // end PullToRefreshBox
-
-        // ── FAB (Floating Action Button) pentru adaugare rapida dispozitiv ──
-        FloatingActionButton(
-            onClick = { Log.d("HomeScreen", "FAB add device clicked") },
+    Scaffold(
+        containerColor = Background,
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { paddingValues ->
+        Box(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(24.dp),
-            containerColor = Primary,
-            contentColor = Color.Black,
-            shape = CircleShape
+                .fillMaxSize()
+                .background(Background)
+                .padding(paddingValues)
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Add device")
+            PullToRefreshBox(
+                isRefreshing = isLoading,
+                onRefresh = { viewModel.loadDashboard() },
+                modifier = Modifier.fillMaxSize()
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 88.dp)
+                ) {
+                    // ── Header ──
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Surface)
+                                .padding(horizontal = 20.dp, vertical = 18.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(CircleShape)
+                                        .background(SurfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = OnSurface,
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = if (userName.isNotBlank()) "$greeting, $userName"
+                                               else greeting,
+                                        color = OnBackground,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = currentDate,
+                                        color = OnSurface,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+
+                            // Clopotel cu badge: navigheaza la NotificationsScreen
+                            // Badge-ul rosu apare doar cand unreadCount > 0
+                            Box {
+                                IconButton(onClick = {
+                                    navController.navigate(NavRoutes.Notifications.route)
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Notifications,
+                                        contentDescription = "Notifications",
+                                        tint = Primary
+                                    )
+                                }
+                                if (unreadCount > 0) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(ErrorColor)
+                                            .align(Alignment.TopEnd)
+                                            .offset(x = (-10).dp, y = 10.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Statistics ──
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        SectionTitle(title = "Statistics")
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            item {
+                                StatCard(
+                                    icon = Icons.Default.Devices,
+                                    label = "Devices",
+                                    value = "${stats?.total_devices ?: 0}",
+                                    change = "total"
+                                )
+                            }
+                            item {
+                                val kwh = if (energyKwh > 0) String.format("%.1f", energyKwh) else "0.0"
+                                StatCard(
+                                    icon = Icons.Default.Bolt,
+                                    label = "Consumption",
+                                    value = "$kwh kWh",
+                                    change = "est. today"
+                                )
+                            }
+                            item {
+                                StatCard(
+                                    icon = Icons.Default.AutoAwesome,
+                                    label = "Automations",
+                                    value = "${stats?.total_commands_today ?: 0}",
+                                    change = "today"
+                                )
+                            }
+                        }
+                    }
+
+                    // ── Quick Actions ──
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        SectionTitle(title = "Quick Actions")
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            item {
+                                QuickActionChip(
+                                    label = "All Off",
+                                    icon = Icons.Default.PowerSettingsNew,
+                                    isActive = activeChipIndex == 0,
+                                    onClick = {
+                                        activeChipIndex = if (activeChipIndex == 0) -1 else 0
+                                        viewModel.allOff()
+                                    }
+                                )
+                            }
+                            item {
+                                QuickActionChip(
+                                    label = "Movie Mode",
+                                    icon = Icons.Default.Movie,
+                                    isActive = activeChipIndex == 1,
+                                    onClick = {
+                                        activeChipIndex = if (activeChipIndex == 1) -1 else 1
+                                        Log.d("HomeScreen", "Movie Mode triggered")
+                                    }
+                                )
+                            }
+                            item {
+                                QuickActionChip(
+                                    label = "Good Night",
+                                    icon = Icons.Default.DarkMode,
+                                    isActive = activeChipIndex == 2,
+                                    onClick = {
+                                        activeChipIndex = if (activeChipIndex == 2) -1 else 2
+                                        Log.d("HomeScreen", "Good Night triggered")
+                                    }
+                                )
+                            }
+                            item {
+                                QuickActionChip(
+                                    label = "Away",
+                                    icon = Icons.Default.DirectionsRun,
+                                    isActive = activeChipIndex == 3,
+                                    onClick = {
+                                        activeChipIndex = if (activeChipIndex == 3) -1 else 3
+                                        viewModel.awayMode()
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // ── Rooms ──
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        SectionTitle(
+                            title = "Rooms",
+                            action = {
+                                TextButton(onClick = {
+                                    navController.navigate(NavRoutes.Devices.route)
+                                }) {
+                                    Text("All", color = Primary, style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                        )
+
+                        if (isLoading) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(180.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = Primary)
+                            }
+                        } else {
+                            RoomsGrid(
+                                rooms = rooms,
+                                onRoomClick = { navController.navigate(NavRoutes.Devices.route) },
+                                onAddRoomClick = { showAddRoomDialog = true }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // FAB
+            FloatingActionButton(
+                onClick = { Log.d("HomeScreen", "FAB add device clicked") },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp),
+                containerColor = Primary,
+                contentColor = Color.Black,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add device")
+            }
         }
     }
 }
@@ -331,9 +348,9 @@ fun HomeScreen(
  * reale plus un card de adaugare (AddRoomCard) pe ultimul slot disponibil.
  * Cand nu exista date de la API, foloseste camere de tip placeholder.
  *
- * @param rooms Lista camerelor primite din ViewModel
- * @param onRoomClick Callback apelat la click pe o camera
- * @param onAddRoomClick Callback apelat la click pe cardul de adaugare camera
+ * @param rooms lista camerelor primite din ViewModel
+ * @param onRoomClick callback apelat la click pe o camera
+ * @param onAddRoomClick callback apelat la click pe cardul de adaugare
  */
 @Composable
 private fun RoomsGrid(
@@ -341,7 +358,6 @@ private fun RoomsGrid(
     onRoomClick: (String) -> Unit,
     onAddRoomClick: () -> Unit
 ) {
-    // Afiseaza maximum 3 camere; daca lista e goala, foloseste date placeholder
     val displayRooms = if (rooms.isEmpty()) {
         listOf(
             RoomInfo("Living Room", 3, 2),
@@ -354,7 +370,6 @@ private fun RoomsGrid(
         modifier = Modifier.padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Randul 1 al gridului: primele doua sloturi (camera 0 si camera 1 sau AddRoom)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (displayRooms.isNotEmpty()) {
                 RoomCard(
@@ -386,7 +401,6 @@ private fun RoomsGrid(
             }
         }
 
-        // Randul 2 al gridului: camera 2 si intotdeauna cardul de adaugare camera
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (displayRooms.size >= 3) {
                 RoomCard(

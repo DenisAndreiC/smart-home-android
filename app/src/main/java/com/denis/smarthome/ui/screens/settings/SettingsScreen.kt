@@ -1,5 +1,8 @@
 package com.denis.smarthome.ui.screens.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -32,6 +36,7 @@ fun SettingsScreen(
     navController: NavController,
     viewModel: SettingsViewModel = viewModel()
 ) {
+    val context               = LocalContext.current
     val userName          by viewModel.userName.collectAsState()
     val userEmail         by viewModel.userEmail.collectAsState()
     val isServerConnected by viewModel.isServerConnected.collectAsState()
@@ -42,9 +47,13 @@ fun SettingsScreen(
     var showLogoutDialog      by remember { mutableStateOf(false) }
     var showUrlDialog         by remember { mutableStateOf(false) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
-    var showBugDialog         by remember { mutableStateOf(false) }
     var showTosDialog         by remember { mutableStateOf(false) }
-    var showLanguageDialog    by remember { mutableStateOf(false) }
+    var newUsernameInput      by remember { mutableStateOf("") }
+
+    // Pre-fill username input when dialog opens
+    LaunchedEffect(showEditProfileDialog) {
+        if (showEditProfileDialog) newUsernameInput = userName
+    }
 
     // Logout confirmation
     if (showLogoutDialog) {
@@ -80,35 +89,32 @@ fun SettingsScreen(
             title = { Text("Edit Profile", color = OnBackground, fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Current account:", color = OnSurface, fontSize = 12.sp)
-                    Text(userName.ifBlank { "—" }, color = Primary, fontWeight = FontWeight.Bold)
                     Text(userEmail.ifBlank { "—" }, color = OnSurface, fontSize = 13.sp)
-                    Spacer(Modifier.height(4.dp))
-                    Text("Profile editing is not available in this version.", color = OnSurface, fontSize = 12.sp)
+                    OutlinedTextField(
+                        value = newUsernameInput,
+                        onValueChange = { newUsernameInput = it },
+                        label = { Text("Username") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Primary,
+                            focusedLabelColor = Primary,
+                            unfocusedBorderColor = Outline,
+                            cursorColor = Primary,
+                            focusedTextColor = OnBackground,
+                            unfocusedTextColor = OnBackground
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showEditProfileDialog = false }) { Text("OK", color = Primary) }
-            }
-        )
-    }
-
-    // Report a Bug dialog
-    if (showBugDialog) {
-        AlertDialog(
-            onDismissRequest = { showBugDialog = false },
-            containerColor = Surface,
-            title = { Text("Report a Bug", color = OnBackground, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Found a bug? Contact us at:", color = OnSurface)
-                    Text("support@smarthome.app", color = Primary, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(4.dp))
-                    Text("Please describe the issue and the steps to reproduce it.", color = OnSurface, fontSize = 12.sp)
-                }
+                TextButton(onClick = {
+                    if (newUsernameInput.isNotBlank()) viewModel.updateUsername(newUsernameInput)
+                    showEditProfileDialog = false
+                }) { Text("Save", color = Primary, fontWeight = FontWeight.Bold) }
             },
-            confirmButton = {
-                TextButton(onClick = { showBugDialog = false }) { Text("OK", color = Primary) }
+            dismissButton = {
+                TextButton(onClick = { showEditProfileDialog = false }) { Text("Cancel", color = OnSurface) }
             }
         )
     }
@@ -130,39 +136,6 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showTosDialog = false }) { Text("Close", color = Primary) }
-            }
-        )
-    }
-
-    // Language dialog
-    if (showLanguageDialog) {
-        val languages = listOf("English", "Română")
-        AlertDialog(
-            onDismissRequest = { showLanguageDialog = false },
-            containerColor = Surface,
-            title = { Text("Language", color = OnBackground, fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    languages.forEach { lang ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showLanguageDialog = false }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(lang, color = OnBackground, modifier = Modifier.weight(1f))
-                            if (lang == "Română") {
-                                Icon(Icons.Default.Check, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text("Language change requires app restart.", color = OnSurface, fontSize = 11.sp)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showLanguageDialog = false }) { Text("Cancel", color = OnSurface) }
             }
         )
     }
@@ -338,9 +311,7 @@ fun SettingsScreen(
                     SettingsRow(
                         icon = Icons.Default.Language,
                         label = "Language",
-                        value = "Română",
-                        showChevron = true,
-                        onClick = { showLanguageDialog = true }
+                        value = "English"
                     )
                 }
             }
@@ -357,15 +328,27 @@ fun SettingsScreen(
                 border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
             ) {
                 Column {
-                    SettingsRow(icon = Icons.Default.Info,        label = "Version",          value = "1.0.0")
+                    SettingsRow(icon = Icons.Default.Info, label = "Version", value = "1.0.0")
                     HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
-                    SettingsRow(icon = Icons.Default.Code,        label = "Backend Version",  value = "FastAPI 0.115")
-                    HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
-                    SettingsRow(icon = Icons.Default.BugReport,   label = "Report a Bug",     showChevron = true, onClick = { showBugDialog = true })
+                    SettingsRow(
+                        icon = Icons.Default.BugReport,
+                        label = "Report a Bug",
+                        showChevron = true,
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                data = Uri.parse("mailto:")
+                                putExtra(Intent.EXTRA_EMAIL, arrayOf("cucudenis24@stud.ase.ro"))
+                                putExtra(Intent.EXTRA_SUBJECT, "[SmartHome Bug Report]")
+                                putExtra(Intent.EXTRA_TEXT,
+                                    "Device: ${Build.MODEL}\nAndroid: ${Build.VERSION.RELEASE}\nApp version: 1.0")
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Send Email"))
+                        }
+                    )
                     HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
                     SettingsRow(icon = Icons.Default.Description,  label = "Terms of Service", showChevron = true, onClick = { showTosDialog = true })
                     HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
-                    SettingsRow(icon = Icons.Default.PrivacyTip,  label = "Privacy Policy",   showChevron = true, onClick = { showTosDialog = true })
+                    SettingsRow(icon = Icons.Default.PrivacyTip,   label = "Privacy Policy",   showChevron = true, onClick = { showTosDialog = true })
                 }
             }
             Spacer(Modifier.height(24.dp))

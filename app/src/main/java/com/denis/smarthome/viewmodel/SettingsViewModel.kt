@@ -140,7 +140,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
      * si redirectioneaza automat la ecranul de Login.
      */
     fun logout() {
-        // clearToken() sterge intrarea din DataStore Preferences; e o operatie suspendata
         viewModelScope.launch { authRepo.logout() }
+    }
+
+    fun updateUsername(newUsername: String) {
+        viewModelScope.launch {
+            authRepo.updateUser(newUsername)
+                .onSuccess { _userName.value = it.username }
+        }
     }
 }

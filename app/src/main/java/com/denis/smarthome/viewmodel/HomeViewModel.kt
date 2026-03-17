@@ -4,6 +4,7 @@
  * Incarca statisticile generale ale sistemului, informatiile utilizatorului
  * si lista de camere derivata din dispozitivele active.
  * Calculeaza salutul si data curenta dinamic, in functie de ora si locale.
+ * Expune actiunile rapide allOff() si awayMode() cu feedback prin snackbar.
  *
  * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
  * Autor: Denis Andrei C.
@@ -35,7 +36,7 @@ import java.util.*
  *
  * @param name numele camerei (ex: "Living", "Bedroom")
  * @param deviceCount numarul total de dispozitive din camera
- * @param activeCount numarul de dispozitive active (is_active == true) din camera
+ * @param activeCount numarul de dispozitive active din camera
  */
 data class RoomInfo(
     val name: String,
@@ -49,6 +50,12 @@ data class RoomInfo(
  * Agrega date din trei repository-uri: dashboard stats, lista de dispozitive si profil user.
  * Lista de camere ([rooms]) nu vine direct din API, ci este construita prin groupBy pe lista
  * de dispozitive, extragand camerele unice si numarand dispozitivele active per camera.
+ *
+ * Consumul energetic ([energyKwh]) este estimat local pe baza tipului fiecarui dispozitiv
+ * activ si un numar de ore de utilizare/zi: TV=0.1kW, AC=1.5kW, RGB=0.01kW, relay=0.05kW.
+ *
+ * Numarul de notificari necitite ([unreadNotificationCount]) este incarcat la fiecare
+ * refresh si afisat pe badge-ul clopotelului din header.
  */
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -72,34 +79,42 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _snackbarMessage = MutableStateFlow<String?>(null)
+    val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
+
+    private val _unreadNotificationCount = MutableStateFlow(0)
+    val unreadNotificationCount: StateFlow<Int> = _unreadNotificationCount.asStateFlow()
+
+    // Estimated daily energy consumption in kWh based on active devices
+    private val _energyKwh = MutableStateFlow(0.0)
+    val energyKwh: StateFlow<Double> = _energyKwh.asStateFlow()
+
     /**
      * Salut dinamic calculat in functie de ora curenta din [Calendar].
      *
-     * 5-11 → dimineata, 12-17 → zi, altfel → seara.
+     * 5-11 -> morning, 12-17 -> afternoon, altfel -> evening.
      * Recalculat la fiecare acces (proprietate fara backing field).
      */
     val greeting: String
         get() {
-            // Citim ora curenta a zilei din Calendar pentru a alege salutul potrivit
             val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
             return when (hour) {
-                in 5..11 -> "Buna dimineata"
-                in 12..17 -> "Buna ziua"
-                else -> "Buna seara"
+                in 5..11 -> "Good morning"
+                in 12..17 -> "Good afternoon"
+                else -> "Good evening"
             }
         }
 
     /**
-     * Data curenta formatata in romana (ex: "Luni, 3 Martie").
+     * Data curenta formatata in engleza (ex: "Monday, March 17").
      *
-     * Foloseste [SimpleDateFormat] cu Locale("ro", "RO") pentru numele zilei
-     * si lunii in limba romana. Prima litera este transformata in majuscula.
+     * Foloseste [SimpleDateFormat] cu [Locale.ENGLISH] pentru consistenta
+     * cu restul interfetei in engleza.
      */
     val currentDate: String
         get() {
-            // Formatul "EEEE, d MMMM" produce ex: "luni, 3 martie" -> capitalizam prima litera
-            val format = SimpleDateFormat("EEEE, d MMMM", Locale("ro", "RO"))
-            return format.format(Date()).replaceFirstChar { it.uppercase() }
+            val format = SimpleDateFormat("EEEE, MMMM d", Locale.ENGLISH)
+            return format.format(Date())
         }
 
     init {
@@ -110,8 +125,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Incarca toate datele necesare dashboard-ului intr-un singur bloc.
      *
-     * Apeleaza in paralel: getMe() pentru profil, getStats() pentru statistici
-     * si getDevices() pentru constructia listei de camere prin groupBy.
+     * Apeleaza in secventa: getMe() pentru profil, getStats() pentru statistici,
+     * getDevices() pentru camere si calcul energie, getNotifications() pentru badge.
      */
     fun loadDashboard() {
         viewModelScope.launch {
@@ -122,22 +137,73 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             dashboardRepo.getStats().onSuccess { _stats.value = it }
                 .onFailure { _error.value = it.message }
 
-            // Construim lista RoomInfo din dispozitive: groupBy room → map la RoomInfo
-            // Nu exista endpoint /rooms, deci derivam camerele din lista de dispozitive
             deviceRepo.getDevices().onSuccess { devices ->
+                // Construim lista RoomInfo din dispozitive: groupBy room -> map la RoomInfo
                 _rooms.value = devices
                     .groupBy { it.room }
                     .map { (room, devs) ->
                         RoomInfo(
-                            name = room,
+                            name = room ?: "Unknown",
                             deviceCount = devs.size,
-                            // Numaram doar dispozitivele cu is_active == true
-                            activeCount = devs.count { it.is_active }
+                            activeCount = devs.count { it.is_online }
                         )
                     }
+
+                // Calcul consum estimat zilnic: pentru fiecare dispozitiv activ,
+                // putere (kW) * 8 ore/zi. Statusul "activ" vine din last_status cand exista.
+                val activeDevices = devices.filter {
+                    it.last_status?.lowercase() == "on" || (it.last_status == null && it.is_online)
+                }
+                val kwhEstimate = activeDevices.sumOf { device ->
+                    val typeL = device.device_type.lowercase()
+                    val nameL = device.name.lowercase()
+                    val powerKw = when {
+                        typeL == "ir_ac" || nameL.contains("ac") || nameL.contains("air") -> 1.5
+                        typeL == "ir_tv" || nameL.contains("tv") -> 0.1
+                        typeL == "ir_rgb" || nameL.contains("rgb") || nameL.contains("bulb") -> 0.01
+                        else -> 0.05
+                    }
+                    powerKw * 8.0 // 8 ore/zi estimat
+                }
+                _energyKwh.value = kwhEstimate
             }
+
+            // Numarul de notificari necitite pentru badge-ul clopotelului din header
+            runCatching { RetrofitClient.apiService.getNotifications() }
+                .onSuccess { notifications ->
+                    _unreadNotificationCount.value = notifications.count { !it.is_read }
+                }
 
             _isLoading.value = false
         }
     }
+
+    /**
+     * Trimite comanda POST /devices/all-off si afiseaza snackbar cu rezultatul.
+     *
+     * La succes: "All devices turned off". La eroare: mesajul de la API.
+     */
+    fun allOff() {
+        viewModelScope.launch {
+            deviceRepo.allOff()
+                .onSuccess { _snackbarMessage.value = "All devices turned off" }
+                .onFailure { _snackbarMessage.value = "Failed: ${it.message}" }
+        }
+    }
+
+    /**
+     * Trimite comanda POST /devices/away-mode si afiseaza snackbar cu rezultatul.
+     *
+     * La succes: "Away mode activated". La eroare: mesajul de la API.
+     */
+    fun awayMode() {
+        viewModelScope.launch {
+            deviceRepo.awayMode()
+                .onSuccess { _snackbarMessage.value = "Away mode activated" }
+                .onFailure { _snackbarMessage.value = "Failed: ${it.message}" }
+        }
+    }
+
+    /** Sterge mesajul de snackbar dupa ce a fost afisat. */
+    fun clearSnackbar() { _snackbarMessage.value = null }
 }

@@ -30,6 +30,7 @@ import com.denis.smarthome.ui.screens.auth.RegisterScreen
 import com.denis.smarthome.ui.screens.control.DeviceControlRouter
 import com.denis.smarthome.ui.screens.devices.DevicesListScreen
 import com.denis.smarthome.ui.screens.home.HomeScreen
+import com.denis.smarthome.ui.screens.notifications.NotificationsScreen
 import com.denis.smarthome.ui.screens.scenes.SceneEditorScreen
 import com.denis.smarthome.ui.screens.scenes.ScenesScreen
 import com.denis.smarthome.ui.screens.settings.SettingsScreen
@@ -103,6 +104,9 @@ fun SmartHomeApp(tokenManager: TokenManager) {
                 }
                 composable(NavRoutes.Settings.route) {
                     SettingsScreen(navController = navController)
+                }
+                composable(NavRoutes.Notifications.route) {
+                    NotificationsScreen(navController = navController)
                 }
                 composable(
                     route = NavRoutes.DeviceControl.route,

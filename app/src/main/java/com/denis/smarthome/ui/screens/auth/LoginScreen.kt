@@ -33,11 +33,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import android.widget.Toast
 import com.denis.smarthome.ui.navigation.NavRoutes
 import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.AuthState
@@ -59,6 +61,7 @@ fun LoginScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
@@ -224,13 +227,15 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // ── Link pentru recuperare parola (UI only, fara logica) ──
+            // ── Link pentru recuperare parola ──
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                 Text(
                     text = "Forgot password?",
                     color = Primary,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.clickable { }
+                    modifier = Modifier.clickable {
+                        Toast.makeText(context, "Feature coming soon", Toast.LENGTH_SHORT).show()
+                    }
                 )
             }
 

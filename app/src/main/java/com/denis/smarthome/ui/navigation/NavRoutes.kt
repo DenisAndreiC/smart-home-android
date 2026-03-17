@@ -36,6 +36,9 @@ sealed class NavRoutes(val route: String) {
     /** Ecranul setarilor — deconectare si preferinte utilizator. */
     object Settings : NavRoutes("settings")
 
+    /** Ecranul notificarilor. */
+    object Notifications : NavRoutes("notifications")
+
     /**
      * Ecranul de control al unui dispozitiv specific.
      * Primeste ID-ul dispozitivului ca argument de tip intreg in ruta.

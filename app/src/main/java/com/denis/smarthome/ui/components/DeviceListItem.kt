@@ -46,9 +46,9 @@ private fun deviceIcon(deviceType: String, name: String): ImageVector {
     val type = deviceType.lowercase()
     val nameLower = name.lowercase()
     return when {
-        type == "tv" || nameLower.contains("tv") || nameLower.contains("television") -> Icons.Default.Tv
-        type == "ac" || nameLower.contains("air") || nameLower.contains("ac") -> Icons.Default.AcUnit
-        nameLower.contains("light") || nameLower.contains("bulb") || nameLower.contains("lamp") -> Icons.Default.Lightbulb
+        type == "ir_tv" || type == "tv" || nameLower.contains("tv") || nameLower.contains("television") -> Icons.Default.Tv
+        type == "ir_ac" || type == "ac" || nameLower.contains("air") || nameLower.contains("ac") -> Icons.Default.AcUnit
+        type == "ir_rgb" || nameLower.contains("rgb") || nameLower.contains("light") || nameLower.contains("bulb") || nameLower.contains("lamp") -> Icons.Default.Lightbulb
         nameLower.contains("fan") -> Icons.Default.Air
         nameLower.contains("coffee") -> Icons.Default.LocalCafe
         else -> Icons.Default.Devices
@@ -71,8 +71,16 @@ fun DeviceListItem(
     device: DeviceResponse,
     onToggle: (Boolean) -> Unit,
     onClick: () -> Unit,
+    onDelete: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    // Derive toggle state from last_status when available, fallback to is_online
+    val isOn = when (device.last_status?.lowercase()) {
+        "on" -> true
+        "off" -> false
+        else -> device.is_online
+    }
+
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Surface),
@@ -83,7 +91,7 @@ fun DeviceListItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onClick)
-                .padding(14.dp),
+                .padding(start = 14.dp, top = 14.dp, bottom = 14.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Iconita dispozitivului selectata dinamic de deviceIcon()
@@ -120,15 +128,13 @@ fun DeviceListItem(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(
-                                if (device.is_active) Color(0xFF4CAF50) else ErrorColor
-                            )
+                            .background(if (isOn) Color(0xFF4CAF50) else ErrorColor)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text = "${device.room} • ${if (device.is_active) "Online" else "Offline"}",
+                    text = "${device.room ?: ""} • ${if (isOn) "Online" else "Offline"}",
                     color = OnSurface,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -142,11 +148,11 @@ fun DeviceListItem(
                 )
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
 
             // Switch M3 pentru pornire/oprire; isi consuma propriul click, nu propaga la card
             Switch(
-                checked = device.is_active,
+                checked = isOn,
                 onCheckedChange = onToggle,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
@@ -155,6 +161,16 @@ fun DeviceListItem(
                     uncheckedTrackColor = SurfaceVariant
                 )
             )
+
+            // Buton de stergere
+            IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = ErrorColor,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }

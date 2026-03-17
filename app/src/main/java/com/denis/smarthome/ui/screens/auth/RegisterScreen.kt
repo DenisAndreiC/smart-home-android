@@ -63,11 +63,31 @@ fun RegisterScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
     var termsAccepted by remember { mutableStateOf(false) }
+    var showLicenseDialog by remember { mutableStateOf(false) }
 
     // collectAsState transforma StateFlow in valoare reactiva pentru Compose
     val authState by authViewModel.authState.collectAsState()
     val isLoading = authState is AuthState.Loading
     val errorMessage = (authState as? AuthState.Error)?.message
+
+    if (showLicenseDialog) {
+        AlertDialog(
+            onDismissRequest = { showLicenseDialog = false },
+            containerColor = Surface,
+            title = { Text("Terms & Privacy", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "This application is a thesis project. Data is stored locally and is not shared with third parties.",
+                    color = OnSurface
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showLicenseDialog = false }) {
+                    Text("OK", color = Primary)
+                }
+            }
+        )
+    }
 
     // Navigheaza la Home cand inregistrarea reuseste si elimina Login din stiva
     LaunchedEffect(authState) {
@@ -250,7 +270,7 @@ fun RegisterScreen(
                         color = Primary,
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.clickable { }
+                        modifier = Modifier.clickable { showLicenseDialog = true }
                     )
                     Text(
                         text = " and ",
@@ -262,7 +282,7 @@ fun RegisterScreen(
                         color = Primary,
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.clickable { }
+                        modifier = Modifier.clickable { showLicenseDialog = true }
                     )
                 }
 
@@ -309,50 +329,6 @@ fun RegisterScreen(
                         Text("Create Account", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // ── Separator orizontal cu eticheta OR SIGN UP WITH ──
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = Outline)
-                    Text("  OR SIGN UP WITH  ", color = OnSurface, style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp)
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = Outline)
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // ── Butoane sociale Google si Apple (UI only, fara integrare reala) ──
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Outline),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = OnBackground)
-                    ) {
-                        Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Google", style = MaterialTheme.typography.labelLarge)
-                    }
-                    OutlinedButton(
-                        onClick = { },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Outline),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = OnBackground)
-                    ) {
-                        Icon(Icons.Default.PhoneIphone, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Apple", style = MaterialTheme.typography.labelLarge)
                     }
                 }
 
