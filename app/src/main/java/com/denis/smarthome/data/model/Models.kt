@@ -148,7 +148,8 @@ data class UpdateUserRequest(
 )
 
 data class ChangePasswordRequest(
-    @SerializedName("current_password") val current_password: String,
+    @SerializedName("current_password") val current_password: String? = null,
+    @SerializedName("email_code")       val email_code: String?       = null,
     @SerializedName("new_password")     val new_password: String
 )
 
