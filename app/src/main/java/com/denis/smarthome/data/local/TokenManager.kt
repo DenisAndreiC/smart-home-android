@@ -1,13 +1,13 @@
 /**
- * TokenManager.kt - Gestiunea persistenta a token-ului JWT de autentificare
+ * TokenManager.kt - Persistent management of the JWT authentication token.
  *
- * Foloseste Jetpack DataStore Preferences pentru stocarea securizata a token-ului JWT.
- * DataStore este alternativa moderna la SharedPreferences: opereaza asincron cu
- * coroutine si Flow, eliminand riscul de ANR (Application Not Responding) cauzat
- * de I/O sincron pe firul principal.
+ * Uses Jetpack DataStore Preferences for secure JWT token storage.
+ * DataStore is the modern replacement for SharedPreferences: it operates
+ * asynchronously with coroutines and Flow, eliminating the ANR risk caused
+ * by synchronous I/O on the main thread.
  *
- * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
- * Autor: Denis Andrei C.
+ * Project: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Author: Denis Andrei C.
  */
 package com.denis.smarthome.data.local
 
@@ -21,21 +21,21 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-// Extensie pe Context care creeaza (sau returneaza) instanta DataStore cu numele "smarthome_prefs".
-// `by preferencesDataStore` este un delegate Kotlin care garanteaza o singura instanta
-// per proces, similara cu un Singleton — indiferent de cate ori se acceseaza Context.dataStore.
-// Fisierul de persistenta este stocat in directorul privat al aplicatiei pe dispozitiv.
+// Context extension that creates (or returns) the DataStore instance named "smarthome_prefs".
+// `by preferencesDataStore` is a Kotlin delegate that guarantees a single instance per
+// process, similar to a Singleton — regardless of how many times Context.dataStore is accessed.
+// The persistence file is stored in the app's private directory on the device.
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "smarthome_prefs")
 
 /**
- * Clasa responsabila cu salvarea, citirea si stergerea token-ului JWT din DataStore.
+ * Responsible for saving, reading, and clearing the JWT token from DataStore.
  *
- * Comparatie DataStore vs SharedPreferences:
- * - SharedPreferences: API sincron, poate bloca firul principal, nu e thread-safe
- * - DataStore Preferences: API asincron bazat pe coroutine si Flow, thread-safe,
- *   suporta anularea operatiei (cancellation) si gestioneaza erorile mai bine.
+ * DataStore vs SharedPreferences:
+ * - SharedPreferences: synchronous API, can block the main thread, not thread-safe.
+ * - DataStore Preferences: async API backed by coroutines and Flow, thread-safe,
+ *   supports cancellation and handles errors more reliably.
  *
- * @param context contextul aplicatiei (Application context), necesar pentru accesul la DataStore
+ * @param context Application context required for DataStore access.
  */
 class TokenManager(private val context: Context) {
 
@@ -45,12 +45,12 @@ class TokenManager(private val context: Context) {
     }
 
     /**
-     * Salveaza token-ul JWT in DataStore dupa autentificare cu succes.
+     * Saves the JWT token to DataStore after a successful authentication.
      *
-     * Functia este `suspend` — se executa asincron, fara a bloca firul principal.
-     * DataStore.edit() garanteaza ca scrierea este atomica si consistenta.
+     * Suspend function — executes asynchronously without blocking the main thread.
+     * DataStore.edit() guarantees atomic and consistent writes.
      *
-     * @param token string-ul JWT primit de la server dupa login sau register
+     * @param token JWT string received from the server after login or register.
      */
     suspend fun saveToken(token: String) {
         context.dataStore.edit { prefs ->
@@ -59,23 +59,23 @@ class TokenManager(private val context: Context) {
     }
 
     /**
-     * Returneaza un Flow care emite token-ul curent (sau null daca nu exista).
+     * Returns a Flow that emits the current token (or null if none exists).
      *
-     * Flow<String?> este "reactive" — orice modificare in DataStore (save/clear)
-     * va emite automat noua valoare catre toti colectorii activi.
-     * Nu este o functie suspend, deoarece nu face I/O imediat — returneaza doar
-     * un stream de date care va fi colectat asincron de apelant.
+     * Flow<String?> is reactive — any DataStore change (save/clear) automatically
+     * emits the new value to all active collectors.
+     * Not a suspend function because it does not perform I/O immediately —
+     * it just returns a stream that the caller collects asynchronously.
      *
-     * @return [Flow] care emite token-ul JWT sau null daca utilizatorul nu e autentificat
+     * @return [Flow] emitting the JWT token, or null if the user is not authenticated.
      */
     fun getToken(): Flow<String?> =
         context.dataStore.data.map { prefs -> prefs[TOKEN_KEY] }
 
     /**
-     * Sterge token-ul JWT din DataStore — folosit la logout.
+     * Removes the JWT token from DataStore — called on logout.
      *
-     * Dupa apelul acestei functii, getToken() va emite null si isLoggedIn() va emite false,
-     * declansand navigarea catre ecranul de login in toate colectorii activi.
+     * After this call, getToken() emits null and isLoggedIn() emits false,
+     * triggering navigation to the login screen in all active collectors.
      */
     suspend fun clearToken() {
         context.dataStore.edit { prefs ->
@@ -84,13 +84,13 @@ class TokenManager(private val context: Context) {
     }
 
     /**
-     * Returneaza un Flow<Boolean> care indica daca utilizatorul este autentificat.
+     * Returns a Flow<Boolean> indicating whether the user is authenticated.
      *
-     * Derivat din [getToken] prin transformare: emite `true` daca token-ul exista
-     * si nu este gol, `false` in caz contrar. Folosit in NavGraph pentru a decide
-     * ruta de start (login vs home) si in SettingsScreen pentru logica de logout.
+     * Derived from [getToken] by mapping: emits `true` if a non-blank token exists,
+     * `false` otherwise. Used in NavGraph to determine the start destination
+     * (login vs home) and in SettingsScreen for logout logic.
      *
-     * @return [Flow] care emite true daca exista un token JWT valid stocat local
+     * @return [Flow] emitting true if a valid JWT token is stored locally.
      */
     fun isLoggedIn(): Flow<Boolean> =
         getToken().map { it != null && it.isNotBlank() }

@@ -37,6 +37,7 @@ import com.denis.smarthome.ui.screens.settings.ChangePasswordScreen
 import com.denis.smarthome.ui.screens.settings.SettingsScreen
 import com.denis.smarthome.ui.theme.*
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.runBlocking
 
 data class BottomNavItem(
     val route: String,
@@ -60,13 +61,12 @@ fun SmartHomeApp(tokenManager: TokenManager) {
 
     val showBottomBar = currentRoute in bottomNavRoutes
 
-    LaunchedEffect(Unit) {
-        val isLoggedIn = tokenManager.isLoggedIn().firstOrNull() ?: false
-        if (isLoggedIn) {
-            navController.navigate(NavRoutes.Home.route) {
-                popUpTo(NavRoutes.Login.route) { inclusive = true }
-            }
-        }
+    // Determine start destination synchronously before the NavHost renders.
+    // Using runBlocking here avoids the race condition caused by async LaunchedEffect:
+    // the NavHost now starts at the correct screen from the very first frame.
+    val startDestination = remember {
+        val hasToken = runBlocking { tokenManager.getToken().firstOrNull() } != null
+        if (hasToken) NavRoutes.Home.route else NavRoutes.Login.route
     }
 
     Scaffold(
@@ -85,7 +85,7 @@ fun SmartHomeApp(tokenManager: TokenManager) {
         ) {
             NavHost(
                 navController = navController,
-                startDestination = NavRoutes.Login.route,
+                startDestination = startDestination,
                 modifier = Modifier.fillMaxSize()
             ) {
                 composable(NavRoutes.Login.route) {
