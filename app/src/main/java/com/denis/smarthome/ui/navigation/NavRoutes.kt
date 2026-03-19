@@ -1,52 +1,52 @@
 /**
- * NavRoutes.kt - Rutele de navigare ale aplicatiei SmartHome
+ * NavRoutes.kt - Navigation routes for the SmartHome app.
  *
- * Defineste toate destinatiile posibile din graficul de navigare Compose
- * sub forma unei clase sigilate (sealed class). Fiecare obiect interior
- * reprezinta un ecran cu ruta sa unica ca sir de caractere.
+ * Defines all possible destinations in the Compose navigation graph
+ * as a sealed class. Each inner object represents a screen with its
+ * unique route string.
  *
- * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
- * Autor: Denis Andrei C.
+ * Project: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Author: Denis Andrei C.
  */
 package com.denis.smarthome.ui.navigation
 
 /**
- * Clasa sigilata care centralizeaza toate rutele de navigare.
- * Folosirea unei sealed class previne rutele incorecte la compile time
- * si ofera un singur punct de adevar pentru toate destinatiile.
+ * Sealed class centralizing all navigation routes.
+ * Using a sealed class prevents incorrect routes at compile time
+ * and provides a single source of truth for all destinations.
  *
- * @param route Sirul de caractere utilizat de NavHost pentru identificarea ecranului.
+ * @param route The string used by NavHost to identify the screen.
  */
 sealed class NavRoutes(val route: String) {
-    /** Ecranul de autentificare — destinatia de start implicita. */
+    /** Authentication screen — default start destination. */
     object Login : NavRoutes("login")
 
-    /** Ecranul de inregistrare cont nou. */
+    /** New account registration screen. */
     object Register : NavRoutes("register")
 
-    /** Ecranul principal (dashboard) cu statistici si activitate recenta. */
+    /** Main dashboard screen with stats and recent activity. */
     object Home : NavRoutes("home")
 
-    /** Ecranul listei de dispozitive cu filtrare dupa camera. */
+    /** Device list screen with room filter chips. */
     object Devices : NavRoutes("devices")
 
-    /** Ecranul scenelor automate — executie si stergere. */
+    /** Scenes screen — execute and delete automation scenes. */
     object Scenes : NavRoutes("scenes")
 
-    /** Ecranul setarilor — deconectare si preferinte utilizator. */
+    /** Settings screen — logout and user preferences. */
     object Settings : NavRoutes("settings")
 
-    /** Ecranul notificarilor. */
+    /** Notifications screen. */
     object Notifications : NavRoutes("notifications")
 
     /**
-     * Ecranul de control al unui dispozitiv specific.
-     * Primeste ID-ul dispozitivului ca argument de tip intreg in ruta.
+     * Device control screen for a specific device.
+     * Receives the device ID as an integer argument in the route.
      */
     object DeviceControl : NavRoutes("device_control/{deviceId}") {
         /**
-         * Construieste ruta concreta cu ID-ul dispozitivului interpolat.
-         * @param deviceId ID-ul unic al dispozitivului de controlat.
+         * Builds the concrete route with the device ID interpolated.
+         * @param deviceId Unique ID of the device to control.
          */
         fun createRoute(deviceId: Int) = "device_control/$deviceId"
     }
@@ -55,21 +55,21 @@ sealed class NavRoutes(val route: String) {
     object ChangePassword : NavRoutes("change_password")
 
     /**
-     * Ecranul editorului de scena — creare sau editare scena existenta.
-     * [sceneId] este optional: absent = scena noua, prezent = editare.
+     * Scene editor screen — create or edit an existing scene.
+     * [sceneId] is optional: absent = new scene, present = edit existing.
      */
     object SceneEditor : NavRoutes("scene_editor?sceneId={sceneId}") {
         /**
-         * Construieste ruta pentru editor.
-         * @param sceneId ID-ul scenei de editat, sau null pentru scena noua.
+         * Builds the editor route.
+         * @param sceneId ID of the scene to edit, or null for a new scene.
          */
         fun createRoute(sceneId: Int? = null) =
-            // Daca sceneId este null, navigam fara parametru de interogare
+            // If sceneId is null, navigate without the query parameter
             if (sceneId != null) "scene_editor?sceneId=$sceneId" else "scene_editor"
     }
 }
 
-/** Lista rutelor care apar in bara de navigare de jos (bottom navigation bar). */
+/** Routes that show the bottom navigation bar. */
 val bottomNavRoutes = listOf(
     NavRoutes.Home.route,
     NavRoutes.Devices.route,
