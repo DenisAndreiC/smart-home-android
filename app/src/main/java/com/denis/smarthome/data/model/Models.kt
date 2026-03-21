@@ -177,6 +177,7 @@ data class RoutineRecommendation(
     @SerializedName("suggested_time") val suggested_time: String,
     val confidence: Float,
     val occurrences: Int,
+    @SerializedName("distinct_days")  val distinct_days: Int = 0,
     val message: String
 )
 
@@ -201,9 +202,11 @@ data class AnomaliesResponse(
 )
 
 data class MLSettingsRequest(
-    @SerializedName("min_occurrences") val min_occurrences: Int
+    @SerializedName("min_occurrences") val min_occurrences: Int,
+    @SerializedName("min_days")        val min_days: Int = 4
 )
 
 data class MLSettingsResponse(
-    @SerializedName("min_occurrences") val min_occurrences: Int
+    @SerializedName("min_occurrences") val min_occurrences: Int,
+    @SerializedName("min_days")        val min_days: Int = 4
 )

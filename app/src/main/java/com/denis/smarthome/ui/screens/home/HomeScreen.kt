@@ -355,7 +355,7 @@ fun HomeScreen(
                                             fontWeight = FontWeight.Medium
                                         )
                                         Text(
-                                            text = "Detected ${rec.occurrences} times · ${(rec.confidence * 100).toInt()}% confidence",
+                                            text = "Detected ${rec.occurrences} times on ${rec.distinct_days} days · ${(rec.confidence * 100).toInt()}% confidence",
                                             color = Color(0xFF7FA8BB),
                                             style = MaterialTheme.typography.bodySmall
                                         )

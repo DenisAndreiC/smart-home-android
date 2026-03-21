@@ -95,6 +95,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _mlMinOccurrences = MutableStateFlow(5)
     val mlMinOccurrences: StateFlow<Int> = _mlMinOccurrences.asStateFlow()
 
+    // Minimum distinct days for ML pattern detection (2-7, default 4)
+    private val _mlMinDays = MutableStateFlow(4)
+    val mlMinDays: StateFlow<Int> = _mlMinDays.asStateFlow()
+
+    // True after a resend-verification email is successfully sent
+    private val _verificationSent = MutableStateFlow(false)
+    val verificationSent: StateFlow<Boolean> = _verificationSent.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -186,7 +194,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun loadMLSettings() {
         viewModelScope.launch {
             runCatching { RetrofitClient.apiService.getMLSettings() }
-                .onSuccess { _mlMinOccurrences.value = it.min_occurrences }
+                .onSuccess {
+                    _mlMinOccurrences.value = it.min_occurrences
+                    _mlMinDays.value = it.min_days
+                }
         }
     }
 
@@ -196,7 +207,35 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun updateMLMinOccurrences(value: Int) {
         _mlMinOccurrences.value = value
         viewModelScope.launch {
-            runCatching { RetrofitClient.apiService.updateMLSettings(MLSettingsRequest(value)) }
+            runCatching {
+                RetrofitClient.apiService.updateMLSettings(
+                    MLSettingsRequest(min_occurrences = value, min_days = _mlMinDays.value)
+                )
+            }
+        }
+    }
+
+    /**
+     * Updates the minimum distinct days threshold via POST /ml/settings.
+     */
+    fun updateMLMinDays(days: Int) {
+        _mlMinDays.value = days
+        viewModelScope.launch {
+            runCatching {
+                RetrofitClient.apiService.updateMLSettings(
+                    MLSettingsRequest(min_occurrences = _mlMinOccurrences.value, min_days = days)
+                )
+            }
+        }
+    }
+
+    /**
+     * Sends POST /auth/resend-verification and sets verificationSent on success.
+     */
+    fun resendVerification() {
+        viewModelScope.launch {
+            runCatching { RetrofitClient.apiService.resendVerification() }
+                .onSuccess { _verificationSent.value = true }
         }
     }
 

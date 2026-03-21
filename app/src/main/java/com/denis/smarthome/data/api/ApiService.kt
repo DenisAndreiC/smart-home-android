@@ -127,4 +127,7 @@ interface ApiService {
 
     @POST("ml/settings")
     suspend fun updateMLSettings(@Body request: MLSettingsRequest): MLSettingsResponse
+
+    @POST("auth/resend-verification")
+    suspend fun resendVerification(): MessageResponse
 }

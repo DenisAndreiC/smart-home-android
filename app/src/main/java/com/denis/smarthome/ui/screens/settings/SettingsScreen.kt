@@ -49,8 +49,10 @@ fun SettingsScreen(
     val lastSyncTime      by viewModel.lastSyncTime.collectAsState()
     val avatarUrl         by viewModel.avatarUrl.collectAsState()
     val isUploading       by viewModel.isUploadingAvatar.collectAsState()
-    val isVerified        by viewModel.isVerified.collectAsState()
-    val mlMinOccurrences  by viewModel.mlMinOccurrences.collectAsState()
+    val isVerified           by viewModel.isVerified.collectAsState()
+    val mlMinOccurrences     by viewModel.mlMinOccurrences.collectAsState()
+    val mlMinDays            by viewModel.mlMinDays.collectAsState()
+    val verificationSent     by viewModel.verificationSent.collectAsState()
 
     // Gallery launcher — opens image picker, passes selected URI to the ViewModel
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -286,17 +288,40 @@ fun SettingsScreen(
                                         fontWeight = FontWeight.Medium
                                     )
                                 } else {
-                                    Icon(
-                                        Icons.Default.Warning,
-                                        contentDescription = "Not verified",
-                                        tint = Color(0xFFFF9800),
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Text(
-                                        "Not verified - check your email",
-                                        color = Color(0xFFFF9800),
-                                        fontSize = 12.sp
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.clickable(enabled = !verificationSent) {
+                                            viewModel.resendVerification()
+                                        }
+                                    ) {
+                                        if (verificationSent) {
+                                            Icon(
+                                                Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = Color(0xFF4CAF50),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                "Verification email sent!",
+                                                color = Color(0xFF4CAF50),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        } else {
+                                            Icon(
+                                                Icons.Default.Warning,
+                                                contentDescription = "Not verified",
+                                                tint = Color(0xFFFF9800),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                "Not verified — tap to resend email",
+                                                color = Color(0xFFFF9800),
+                                                fontSize = 12.sp
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -499,6 +524,73 @@ fun SettingsScreen(
                     ) {
                         Text("3", color = OnSurface, fontSize = 11.sp)
                         Text("20", color = OnSurface, fontSize = 11.sp)
+                    }
+
+                    HorizontalDivider(
+                        color = Outline,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+
+                    // Second slider: minimum distinct days
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier.size(36.dp).clip(CircleShape)
+                                .background(PrimaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                tint = Primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Minimum different days",
+                                color = OnBackground,
+                                fontSize = 15.sp
+                            )
+                            Text(
+                                "Pattern must repeat on at least this many different days",
+                                color = OnSurface,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            mlMinDays.toString(),
+                            color = Primary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Slider(
+                        value = mlMinDays.toFloat(),
+                        onValueChange = { newVal ->
+                            viewModel.updateMLMinDays(newVal.toInt())
+                        },
+                        valueRange = 2f..7f,
+                        steps = 4,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Primary,
+                            activeTrackColor = Primary,
+                            inactiveTrackColor = Outline
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("2", color = OnSurface, fontSize = 11.sp)
+                        Text("7", color = OnSurface, fontSize = 11.sp)
                     }
                 }
             }
