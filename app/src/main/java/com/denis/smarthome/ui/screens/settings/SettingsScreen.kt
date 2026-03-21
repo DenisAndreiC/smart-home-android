@@ -53,6 +53,7 @@ fun SettingsScreen(
     val mlMinOccurrences     by viewModel.mlMinOccurrences.collectAsState()
     val mlMinDays            by viewModel.mlMinDays.collectAsState()
     val verificationSent     by viewModel.verificationSent.collectAsState()
+    val settingsError        by viewModel.settingsError.collectAsState()
 
     // Gallery launcher — opens image picker, passes selected URI to the ViewModel
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -61,11 +62,21 @@ fun SettingsScreen(
 
     val baseUrl = "http://10.0.2.2:8000"
 
+    val snackbarHostState = remember { SnackbarHostState() }
+
     var showLogoutDialog      by remember { mutableStateOf(false) }
     var showUrlDialog         by remember { mutableStateOf(false) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var showTosDialog         by remember { mutableStateOf(false) }
     var newUsernameInput      by remember { mutableStateOf("") }
+
+    // Show error snackbar when settingsError is set
+    LaunchedEffect(settingsError) {
+        settingsError?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearSettingsError()
+        }
+    }
 
     // Pre-fill display name input when dialog opens
     LaunchedEffect(showEditProfileDialog) {
@@ -179,7 +190,8 @@ fun SettingsScreen(
     }
 
     Scaffold(
-        containerColor = Background
+        containerColor = Background,
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(Background).padding(innerPadding),

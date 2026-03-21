@@ -12,6 +12,7 @@ package com.denis.smarthome.viewmodel
 
 import android.app.Application
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.denis.smarthome.data.api.RetrofitClient
@@ -103,6 +104,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _verificationSent = MutableStateFlow(false)
     val verificationSent: StateFlow<Boolean> = _verificationSent.asStateFlow()
 
+    // Non-null when resendVerification() or any settings call fails — shown as snackbar
+    private val _settingsError = MutableStateFlow<String?>(null)
+    val settingsError: StateFlow<String?> = _settingsError.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -193,51 +198,83 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
      */
     fun loadMLSettings() {
         viewModelScope.launch {
+            Log.d("SettingsVM", "loadMLSettings: fetching GET /ml/settings")
             runCatching { RetrofitClient.apiService.getMLSettings() }
                 .onSuccess {
+                    Log.d("SettingsVM", "loadMLSettings: min_occurrences=${it.min_occurrences} min_days=${it.min_days}")
                     _mlMinOccurrences.value = it.min_occurrences
                     _mlMinDays.value = it.min_days
+                }
+                .onFailure {
+                    Log.e("SettingsVM", "loadMLSettings failed: ${it.message}", it)
                 }
         }
     }
 
     /**
      * Updates the minimum pattern occurrences threshold via POST /ml/settings.
+     * Sends both fields together so the backend persists the full settings object.
      */
     fun updateMLMinOccurrences(value: Int) {
         _mlMinOccurrences.value = value
         viewModelScope.launch {
+            Log.d("SettingsVM", "updateMLMinOccurrences: value=$value min_days=${_mlMinDays.value}")
             runCatching {
                 RetrofitClient.apiService.updateMLSettings(
                     MLSettingsRequest(min_occurrences = value, min_days = _mlMinDays.value)
                 )
+            }.onSuccess {
+                Log.d("SettingsVM", "updateMLMinOccurrences: saved min_occurrences=${it.min_occurrences} min_days=${it.min_days}")
+                _mlMinOccurrences.value = it.min_occurrences
+                _mlMinDays.value = it.min_days
+            }.onFailure {
+                Log.e("SettingsVM", "updateMLMinOccurrences failed: ${it.message}", it)
             }
         }
     }
 
     /**
      * Updates the minimum distinct days threshold via POST /ml/settings.
+     * Sends both fields together so the backend persists the full settings object.
      */
     fun updateMLMinDays(days: Int) {
         _mlMinDays.value = days
         viewModelScope.launch {
+            Log.d("SettingsVM", "updateMLMinDays: days=$days min_occurrences=${_mlMinOccurrences.value}")
             runCatching {
                 RetrofitClient.apiService.updateMLSettings(
                     MLSettingsRequest(min_occurrences = _mlMinOccurrences.value, min_days = days)
                 )
+            }.onSuccess {
+                Log.d("SettingsVM", "updateMLMinDays: saved min_occurrences=${it.min_occurrences} min_days=${it.min_days}")
+                _mlMinOccurrences.value = it.min_occurrences
+                _mlMinDays.value = it.min_days
+            }.onFailure {
+                Log.e("SettingsVM", "updateMLMinDays failed: ${it.message}", it)
             }
         }
     }
 
     /**
      * Sends POST /auth/resend-verification and sets verificationSent on success.
+     * On failure, exposes the error via settingsError so the UI can show a snackbar.
      */
     fun resendVerification() {
+        Log.d("SettingsVM", "resendVerification: calling POST auth/resend-verification")
         viewModelScope.launch {
             runCatching { RetrofitClient.apiService.resendVerification() }
-                .onSuccess { _verificationSent.value = true }
+                .onSuccess {
+                    Log.d("SettingsVM", "resendVerification: success — ${it.message}")
+                    _verificationSent.value = true
+                }
+                .onFailure {
+                    Log.e("SettingsVM", "resendVerification failed: ${it.message}", it)
+                    _settingsError.value = "Failed to send verification email: ${it.message}"
+                }
         }
     }
+
+    fun clearSettingsError() { _settingsError.value = null }
 
     /**
      * Picks the image at [uri] from the content provider, converts it to a multipart body,
