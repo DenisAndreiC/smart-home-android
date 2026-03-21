@@ -111,4 +111,20 @@ interface ApiService {
 
     @GET("stats/energy")
     suspend fun getEnergyStats(): EnergyStats
+
+    // ── ML ────────────────────────────────────────────────────────────────────
+
+    @GET("ml/recommendations")
+    suspend fun getRecommendations(
+        @Query("min_occurrences") minOccurrences: Int? = null
+    ): RecommendationsResponse
+
+    @GET("ml/anomalies")
+    suspend fun getAnomalies(): AnomaliesResponse
+
+    @GET("ml/settings")
+    suspend fun getMLSettings(): MLSettingsResponse
+
+    @POST("ml/settings")
+    suspend fun updateMLSettings(@Body request: MLSettingsRequest): MLSettingsResponse
 }

@@ -24,9 +24,10 @@ data class UserResponse(
     val id: Int,
     val username: String,
     val email: String,
-    @SerializedName("display_name") val display_name: String?,
-    @SerializedName("avatar_url")   val avatar_url: String?,
-    @SerializedName("created_at")   val created_at: String
+    @SerializedName("display_name")  val display_name: String?,
+    @SerializedName("avatar_url")    val avatar_url: String?,
+    @SerializedName("created_at")    val created_at: String,
+    @SerializedName("is_verified")   val is_verified: Boolean = false
 )
 
 // ── Rooms ─────────────────────────────────────────────────────────────────────
@@ -165,4 +166,44 @@ data class MessageResponse(
 
 data class EnergyStats(
     @SerializedName("kwh_today") val kwh_today: Double
+)
+
+// ── ML ─────────────────────────────────────────────────────────────────────────
+
+data class RoutineRecommendation(
+    @SerializedName("device_id")      val device_id: Int,
+    @SerializedName("device_name")    val device_name: String,
+    val action: String,
+    @SerializedName("suggested_time") val suggested_time: String,
+    val confidence: Float,
+    val occurrences: Int,
+    val message: String
+)
+
+data class RecommendationsResponse(
+    val recommendations: List<RoutineRecommendation>,
+    @SerializedName("analyzed_days")   val analyzed_days: Int,
+    @SerializedName("total_commands")  val total_commands: Int
+)
+
+data class AnomalyItem(
+    @SerializedName("device_id")   val device_id: Int,
+    @SerializedName("device_name") val device_name: String,
+    val action: String,
+    val time: String,
+    @SerializedName("z_score")     val z_score: Float,
+    val message: String
+)
+
+data class AnomaliesResponse(
+    val anomalies: List<AnomalyItem>,
+    @SerializedName("checked_period") val checked_period: String
+)
+
+data class MLSettingsRequest(
+    @SerializedName("min_occurrences") val min_occurrences: Int
+)
+
+data class MLSettingsResponse(
+    @SerializedName("min_occurrences") val min_occurrences: Int
 )

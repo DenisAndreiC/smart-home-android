@@ -49,6 +49,8 @@ fun SettingsScreen(
     val lastSyncTime      by viewModel.lastSyncTime.collectAsState()
     val avatarUrl         by viewModel.avatarUrl.collectAsState()
     val isUploading       by viewModel.isUploadingAvatar.collectAsState()
+    val isVerified        by viewModel.isVerified.collectAsState()
+    val mlMinOccurrences  by viewModel.mlMinOccurrences.collectAsState()
 
     // Gallery launcher — opens image picker, passes selected URI to the ViewModel
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -264,6 +266,39 @@ fun SettingsScreen(
                                 color = OnSurface,
                                 fontSize = 14.sp
                             )
+                            Spacer(Modifier.height(4.dp))
+                            // Verified / Not verified badge
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                if (isVerified) {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = "Verified",
+                                        tint = Color(0xFF4CAF50),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        "Verified",
+                                        color = Color(0xFF4CAF50),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Default.Warning,
+                                        contentDescription = "Not verified",
+                                        tint = Color(0xFFFF9800),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        "Not verified - check your email",
+                                        color = Color(0xFFFF9800),
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
                         }
                     }
                     Spacer(Modifier.height(12.dp))
@@ -390,6 +425,81 @@ fun SettingsScreen(
                         label = "Language",
                         value = "English"
                     )
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+        }
+
+        // ── Smart Recommendations (ML Settings) ───────────────────────────────
+        item {
+            SettingsSectionTitle("SMART RECOMMENDATIONS")
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                colors = CardDefaults.cardColors(containerColor = Surface),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier.size(36.dp).clip(CircleShape)
+                                .background(PrimaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = Primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Minimum pattern occurrences",
+                                color = OnBackground,
+                                fontSize = 15.sp
+                            )
+                            Text(
+                                "How many times a pattern must repeat before suggesting a routine",
+                                color = OnSurface,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            mlMinOccurrences.toString(),
+                            color = Primary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Slider(
+                        value = mlMinOccurrences.toFloat(),
+                        onValueChange = { newVal ->
+                            viewModel.updateMLMinOccurrences(newVal.toInt())
+                        },
+                        valueRange = 3f..20f,
+                        steps = 16,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Primary,
+                            activeTrackColor = Primary,
+                            inactiveTrackColor = Outline
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("3", color = OnSurface, fontSize = 11.sp)
+                        Text("20", color = OnSurface, fontSize = 11.sp)
+                    }
                 }
             }
             Spacer(Modifier.height(20.dp))

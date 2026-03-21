@@ -16,7 +16,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.denis.smarthome.data.api.RetrofitClient
 import com.denis.smarthome.data.local.TokenManager
+import com.denis.smarthome.data.model.AnomalyItem
 import com.denis.smarthome.data.model.DashboardStats
+import com.denis.smarthome.data.model.RoutineRecommendation
 import com.denis.smarthome.data.model.SceneResponse
 import com.denis.smarthome.data.model.UserResponse
 import com.denis.smarthome.data.repository.AuthRepository
@@ -94,6 +96,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // ID of scene currently executing — used for chip loading state
     private val _executingSceneId = MutableStateFlow<Int?>(null)
     val executingSceneId: StateFlow<Int?> = _executingSceneId.asStateFlow()
+
+    // ML routine recommendations from GET /ml/recommendations
+    private val _recommendations = MutableStateFlow<List<RoutineRecommendation>>(emptyList())
+    val recommendations: StateFlow<List<RoutineRecommendation>> = _recommendations.asStateFlow()
+
+    // Dismissed recommendation device_ids+actions stored locally so they don't reappear
+    private val _dismissedKeys = MutableStateFlow<Set<String>>(emptySet())
+
+    // ML anomalies from GET /ml/anomalies — shown as a warning banner
+    private val _anomalies = MutableStateFlow<List<AnomalyItem>>(emptyList())
+    val anomalies: StateFlow<List<AnomalyItem>> = _anomalies.asStateFlow()
 
     /**
      * Salut dinamic calculat in functie de ora curenta din [Calendar].
@@ -184,7 +197,57 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             runCatching { RetrofitClient.apiService.getScenes() }
                 .onSuccess { _scenes.value = it }
 
+            // Load ML routine recommendations; filter out already-dismissed ones
+            runCatching { RetrofitClient.apiService.getRecommendations() }
+                .onSuccess { response ->
+                    val dismissed = _dismissedKeys.value
+                    _recommendations.value = response.recommendations
+                        .filter { r -> "${r.device_id}:${r.action}" !in dismissed }
+                        .take(3)
+                }
+
+            // Load ML anomalies for the warning banner
+            runCatching { RetrofitClient.apiService.getAnomalies() }
+                .onSuccess { _anomalies.value = it.anomalies }
+
             _isLoading.value = false
+        }
+    }
+
+    /**
+     * Removes a recommendation from the visible list by adding its key to the dismissed set.
+     * Dismissed recommendations survive a dashboard refresh within the same session.
+     */
+    fun dismissRecommendation(recommendation: RoutineRecommendation) {
+        val key = "${recommendation.device_id}:${recommendation.action}"
+        _dismissedKeys.value = _dismissedKeys.value + key
+        _recommendations.value = _recommendations.value.filter { r ->
+            "${r.device_id}:${r.action}" != key
+        }
+    }
+
+    /**
+     * Creates a scene from a routine recommendation via POST /api/scenes/.
+     * The scene contains a single action for the recommended device/action pair.
+     * On success, reloads scenes so it appears in Quick Actions.
+     */
+    fun createSceneFromRecommendation(recommendation: RoutineRecommendation) {
+        viewModelScope.launch {
+            runCatching {
+                val action = com.denis.smarthome.data.model.SceneAction(
+                    device_id = recommendation.device_id,
+                    command_type = recommendation.action
+                )
+                val request = com.denis.smarthome.data.model.SceneRequest(
+                    name = "${recommendation.device_name} at ${recommendation.suggested_time}",
+                    actions = listOf(action)
+                )
+                RetrofitClient.apiService.createScene(request)
+            }.onSuccess {
+                dismissRecommendation(recommendation)
+                runCatching { RetrofitClient.apiService.getScenes() }
+                    .onSuccess { _scenes.value = it }
+            }.onFailure { _error.value = it.message }
         }
     }
 

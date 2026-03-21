@@ -16,6 +16,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.denis.smarthome.data.api.RetrofitClient
 import com.denis.smarthome.data.local.TokenManager
+import com.denis.smarthome.data.model.MLSettingsRequest
 import com.denis.smarthome.data.repository.AuthRepository
 import com.denis.smarthome.ui.theme.ThemeState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -86,12 +87,21 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _lastSyncTime = MutableStateFlow("--:--")
     val lastSyncTime: StateFlow<String> = _lastSyncTime.asStateFlow()
 
+    // Email verification status loaded from /auth/me
+    private val _isVerified = MutableStateFlow(false)
+    val isVerified: StateFlow<Boolean> = _isVerified.asStateFlow()
+
+    // Minimum occurrences for ML pattern detection (3-20, default 5)
+    private val _mlMinOccurrences = MutableStateFlow(5)
+    val mlMinOccurrences: StateFlow<Int> = _mlMinOccurrences.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     init {
         loadUserInfo()
-        // Sincronizeaza starea initiala cu valoarea persistata in DataStore
+        loadMLSettings()
+        // Sync initial theme state with persisted DataStore value
         viewModelScope.launch {
             val saved = tokenManager.getTheme().firstOrNull() ?: true
             ThemeState.isDark = saved
@@ -115,7 +125,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     _userName.value = it.display_name?.takeIf { n -> n.isNotBlank() } ?: it.username
                     _userEmail.value = it.email
                     _avatarUrl.value = it.avatar_url?.takeIf { u -> u.isNotBlank() }
-                    // Conexiunea cu serverul este confirmata - cererea a reusit
+                    _isVerified.value = it.is_verified
+                    // Server connection confirmed — request succeeded
                     _isServerConnected.value = true
                     // Inregistram ora sincronizarii in format HH:mm (ex: "14:35")
                     _lastSyncTime.value = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
@@ -166,6 +177,26 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     _userName.value = it.display_name?.takeIf { n -> n.isNotBlank() } ?: it.username
                     loadUserInfo()
                 }
+        }
+    }
+
+    /**
+     * Loads ML pattern detection settings from GET /ml/settings.
+     */
+    fun loadMLSettings() {
+        viewModelScope.launch {
+            runCatching { RetrofitClient.apiService.getMLSettings() }
+                .onSuccess { _mlMinOccurrences.value = it.min_occurrences }
+        }
+    }
+
+    /**
+     * Updates the minimum pattern occurrences threshold via POST /ml/settings.
+     */
+    fun updateMLMinOccurrences(value: Int) {
+        _mlMinOccurrences.value = value
+        viewModelScope.launch {
+            runCatching { RetrofitClient.apiService.updateMLSettings(MLSettingsRequest(value)) }
         }
     }
 

@@ -14,9 +14,11 @@ package com.denis.smarthome.ui.screens.home
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -69,6 +71,8 @@ fun HomeScreen(
     val energyKwh by viewModel.energyKwh.collectAsState()
     val scenes by viewModel.scenes.collectAsState()
     val executingSceneId by viewModel.executingSceneId.collectAsState()
+    val recommendations by viewModel.recommendations.collectAsState()
+    val anomalies by viewModel.anomalies.collectAsState()
 
     val greeting = viewModel.greeting
     val currentDate = viewModel.currentDate
@@ -267,6 +271,112 @@ fun HomeScreen(
                                     isActive = executingSceneId == scene.id,
                                     onClick = { viewModel.executeQuickScene(scene.id) }
                                 )
+                            }
+                        }
+                    }
+
+                    // ── Anomaly Banner ──
+                    // Show at most one banner when the ML engine detects unusual activity
+                    if (anomalies.isNotEmpty()) {
+                        item {
+                            val anomaly = anomalies.first()
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF2C1A00)),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Warning,
+                                        contentDescription = "Anomaly",
+                                        tint = Color(0xFFFF9800),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Text(
+                                        text = "Unusual activity: ${anomaly.message}",
+                                        color = Color(0xFFFFCC80),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Suggested Routines ──
+                    // Shown only when ML returns non-empty recommendations
+                    if (recommendations.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            SectionTitle(title = "Suggested Routines")
+                        }
+                        items(recommendations, key = { "${it.device_id}:${it.action}" }) { rec ->
+                            val actionIcon = when {
+                                rec.action.lowercase().contains("off") -> Icons.Default.PowerSettingsNew
+                                rec.action.lowercase().contains("on")  -> Icons.Default.Lightbulb
+                                rec.device_name.lowercase().contains("tv") -> Icons.Default.Tv
+                                rec.device_name.lowercase().contains("ac") || rec.device_name.lowercase().contains("air") -> Icons.Default.AcUnit
+                                else -> Icons.Default.AutoAwesome
+                            }
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1B2838)),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2A3F50))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF004D57)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(actionIcon, contentDescription = null, tint = Color(0xFF00BCD4), modifier = Modifier.size(22.dp))
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = rec.message,
+                                            color = Color(0xFFE8F4F8),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = "Detected ${rec.occurrences} times · ${(rec.confidence * 100).toInt()}% confidence",
+                                            color = Color(0xFF7FA8BB),
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        // Create Routine button
+                                        TextButton(
+                                            onClick = { viewModel.createSceneFromRecommendation(rec) },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Text("Create", color = Color(0xFF00BCD4), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                        }
+                                        // Dismiss button
+                                        IconButton(
+                                            onClick = { viewModel.dismissRecommendation(rec) },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = Color(0xFF7FA8BB), modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
