@@ -263,11 +263,9 @@ fun DevicesListScreen(
                         items(filteredDevices, key = { it.id }) { device ->
                             DeviceListItem(
                                 device = device,
-                                onToggle = { isOn -> viewModel.toggleDevice(device.id, isOn) },
                                 onClick = {
                                     navController.navigate(NavRoutes.DeviceControl.createRoute(device.id))
-                                },
-                                onDelete = { deviceToDelete = device.id }
+                                }
                             )
                         }
                     }

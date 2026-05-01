@@ -1,10 +1,13 @@
 /**
- * RgbBulbScreen.kt - Ecran de control pentru becul RGB inteligent
+ * RgbBulbScreen.kt - Ecran de control pentru becul RGB controlat prin IR
  *
- * Afiseaza un cerc hero cu efect de glow realizat prin drawBehind pe Canvas,
- * un card pentru power si luminozitate (Slider dezactivat cand becul e oprit),
- * o roata de culori (ColorWheel) pentru selectia culorii si un grid 2x3 cu presetari rapide.
- * Cand becul este oprit, cercul hero devine gri inchis (#2A2A2A) iar slider-ul e disabled.
+ * Afiseaza un cerc hero cu efect de glow care reflecta culoarea activa,
+ * un card power cu switch, doua butoane de luminozitate (step up/down),
+ * un grid cu butoanele de culori fixe ale telecomenzii IR si butoane pentru efecte.
+ *
+ * NOTA: Becul RGB este non-smart, controlat prin telecomanda IR (NEC protocol).
+ * Nu exista slider de luminozitate sau color picker continuu — doar comenzi discrete
+ * corespunzatoare butoanelor fizice de pe telecomanda 44-key / 24-key.
  *
  * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
  * Autor: Denis Andrei C.
@@ -13,6 +16,8 @@ package com.denis.smarthome.ui.screens.control
 
 import android.app.Application
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -32,20 +37,25 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.denis.smarthome.data.model.DeviceResponse
-import com.denis.smarthome.ui.components.*
 import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.RgbBulbViewModel
-import com.denis.smarthome.viewmodel.rgbPresets
+import com.denis.smarthome.viewmodel.rgbIrColors
 
 /**
- * Ecranul principal de control al becului RGB.
- * Colecteaza starea completa din RgbBulbViewModel (isOn, brightness, selectedColor,
- * selectedAngle, selectedPreset) si le afiseaza intr-o interfata scrollabila.
+ * Ecranul principal de control al becului RGB prin IR.
+ *
+ * Layout:
+ * 1. Hero circle — reflecta culoarea activa cu efect glow
+ * 2. Power card — switch on/off
+ * 3. Brightness card — doua butoane ▲/▼ (step up/down, nu slider)
+ * 4. Color grid — butoane pentru culorile fixe ale telecomenzii IR
+ * 5. Effects — butoane Flash si Fade
  *
  * @param navController pentru navigare inapoi
  * @param device datele dispozitivului (nume si camera)
@@ -61,12 +71,10 @@ fun RgbBulbScreen(
     val viewModel: RgbBulbViewModel = viewModel(
         factory = RgbBulbViewModel.Factory(app, deviceId)
     )
-    val isOn           by viewModel.isOn.collectAsState()
-    val brightness     by viewModel.brightness.collectAsState()
-    val selectedColor  by viewModel.selectedColor.collectAsState()
-    val selectedAngle  by viewModel.selectedAngle.collectAsState()
-    val selectedPreset by viewModel.selectedPreset.collectAsState()
-    val isDeleted      by viewModel.isDeleted.collectAsState()
+    val isOn               by viewModel.isOn.collectAsState()
+    val selectedColor      by viewModel.selectedColor.collectAsState()
+    val activeColorCommand by viewModel.activeColorCommand.collectAsState()
+    val isDeleted          by viewModel.isDeleted.collectAsState()
 
     var showMenu         by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -216,136 +224,217 @@ fun RgbBulbScreen(
                     )
                 }
 
-                // ── Power + Brightness Card ───────────────────────────────────
-                // Card cu doua randuri: Power (Switch) si Brightness (Slider).
-                // Slider-ul are enabled=false cand becul e oprit, prevenind modificarea
-                // luminozitatii fara ca becul sa fie activ.
+                // ── Power Card ────────────────────────────────────────────────
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Surface),
                     shape = RoundedCornerShape(16.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        // Power row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.PowerSettingsNew, contentDescription = null, tint = Primary, modifier = Modifier.size(22.dp))
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text("Power", color = OnBackground, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                            Switch(
-                                checked = isOn,
-                                onCheckedChange = { viewModel.togglePower() },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.White,
-                                    checkedTrackColor = Primary,
-                                    uncheckedThumbColor = OnSurface,
-                                    uncheckedTrackColor = SurfaceVariant
-                                )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.PowerSettingsNew, contentDescription = null, tint = Primary, modifier = Modifier.size(22.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text("Power", color = OnBackground, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = isOn,
+                            onCheckedChange = { viewModel.togglePower() },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Primary,
+                                uncheckedThumbColor = OnSurface,
+                                uncheckedTrackColor = SurfaceVariant
                             )
-                        }
+                        )
+                    }
+                }
 
-                        HorizontalDivider(color = Outline)
-
-                        // Brightness row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Brightness6, contentDescription = null, tint = if (isOn) Primary else OnSurface, modifier = Modifier.size(22.dp))
+                // ── Brightness Card ───────────────────────────────────────────
+                // Doua butoane mari pentru brightness up/down (step-based, nu slider).
+                // Becul IR nu suporta procente — doar increment/decrement pe butonul fizic.
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Brightness6,
+                                contentDescription = null,
+                                tint = if (isOn) Primary else OnSurface,
+                                modifier = Modifier.size(22.dp)
+                            )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("Brightness", color = if (isOn) OnBackground else OnSurface, modifier = Modifier.weight(1f))
                             Text(
-                                text = "${brightness}%",
-                                color = OnSurface,
-                                style = MaterialTheme.typography.bodySmall
+                                "Brightness",
+                                color = if (isOn) OnBackground else OnSurface,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
-                        Slider(
-                            value = brightness.toFloat(),
-                            onValueChange = { if (isOn) viewModel.setBrightness(it.toInt()) },
-                            valueRange = 0f..100f,
-                            steps = 19,
-                            enabled = isOn,
-                            colors = SliderDefaults.colors(
-                                activeTrackColor = Primary,
-                                thumbColor = Color.White,
-                                inactiveTrackColor = SurfaceVariant,
-                                disabledActiveTrackColor = OnSurface.copy(alpha = 0.3f),
-                                disabledThumbColor = OnSurface.copy(alpha = 0.3f),
-                                disabledInactiveTrackColor = SurfaceVariant
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
 
-                // ── Color Spectrum ────────────────────────────────────────────
-                // Componenta ColorWheel pentru selectia culorii prin atingere.
-                // Culoarea si unghiul selectat sunt trimise catre ViewModel doar cand becul e pornit.
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        "Color Spectrum",
-                        color = OnBackground,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        ColorWheel(
-                            selectedAngle = selectedAngle,
-                            onColorChanged = { color, angle ->
-                                if (isOn) viewModel.setColorFromWheel(color, angle)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Brightness Down button
+                            Button(
+                                onClick = { viewModel.brightnessDown() },
+                                enabled = isOn,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SurfaceVariant,
+                                    contentColor = OnBackground,
+                                    disabledContainerColor = SurfaceVariant.copy(alpha = 0.5f),
+                                    disabledContentColor = OnSurface.copy(alpha = 0.3f)
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.RemoveCircleOutline,
+                                    contentDescription = "Brightness Down",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Darker", fontWeight = FontWeight.Medium)
                             }
-                        )
+
+                            // Brightness Up button
+                            Button(
+                                onClick = { viewModel.brightnessUp() },
+                                enabled = isOn,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Primary,
+                                    contentColor = Color.Black,
+                                    disabledContainerColor = Primary.copy(alpha = 0.3f),
+                                    disabledContentColor = OnSurface.copy(alpha = 0.3f)
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.AddCircleOutline,
+                                    contentDescription = "Brightness Up",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Brighter", fontWeight = FontWeight.Medium)
+                            }
+                        }
                     }
                 }
 
-                // ── Quick Presets ─────────────────────────────────────────────
-                // Grid 2x3 cu presetarile de culori predefinite (de ex. Warm White, Red, Blue etc.)
-                // Presetarile sunt definite in RgbBulbViewModel ca lista rgbPresets.
+                // ── Color Selection ───────────────────────────────────────────
+                // Butoane de culori fixe corespunzatoare telecomenzii IR.
+                // Fiecare buton trimite comanda IR directa catre ESP32 (ex: "red", "blue").
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        "Quick Presets",
+                        "Colors",
                         color = OnBackground,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    // Primul rand: primele 3 presetari din lista rgbPresets
+
+                    // Grid de culori — afisam toate culorile IR disponibile
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        rgbPresets.take(3).forEach { preset ->
-                            ColorPresetButton(
-                                name = preset.name,
-                                color = preset.color,
-                                isSelected = selectedPreset == preset.name,
-                                onClick = { viewModel.selectPreset(preset) }
+                        rgbIrColors.forEach { irColor ->
+                            IrColorButton(
+                                irColor = irColor,
+                                isSelected = activeColorCommand == irColor.irCommand,
+                                isEnabled = isOn,
+                                onClick = { viewModel.selectColor(irColor) }
                             )
                         }
                     }
-                    // Al doilea rand: urmatoarele 3 presetari (pozitiile 3, 4, 5)
+                }
+
+                // ── Effects ───────────────────────────────────────────────────
+                // Butoane pentru efectele disponibile pe telecomanda IR (Flash, Fade).
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        "Effects",
+                        color = OnBackground,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        rgbPresets.drop(3).forEach { preset ->
-                            ColorPresetButton(
-                                name = preset.name,
-                                color = preset.color,
-                                isSelected = selectedPreset == preset.name,
-                                onClick = { viewModel.selectPreset(preset) }
+                        // Flash effect button
+                        OutlinedButton(
+                            onClick = { viewModel.effectFlash() },
+                            enabled = isOn,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isOn) Primary else Outline
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default.FlashOn,
+                                contentDescription = null,
+                                tint = if (isOn) Primary else OnSurface.copy(alpha = 0.3f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                "Flash",
+                                color = if (isOn) Primary else OnSurface.copy(alpha = 0.3f),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        // Fade effect button
+                        OutlinedButton(
+                            onClick = { viewModel.effectFade() },
+                            enabled = isOn,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isOn) Primary else Outline
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default.Gradient,
+                                contentDescription = null,
+                                tint = if (isOn) Primary else OnSurface.copy(alpha = 0.3f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                "Fade",
+                                color = if (isOn) Primary else OnSurface.copy(alpha = 0.3f),
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }
@@ -354,5 +443,58 @@ fun RgbBulbScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
+    }
+}
+
+/**
+ * Buton individual de culoare IR cu preview vizual si indicator de selectie.
+ *
+ * Afiseaza un cerc colorat cu border highlight cand este selectat activ.
+ * La click trimite comanda IR corespunzatoare catre ViewModel.
+ *
+ * @param irColor modelul de date al culorii IR (nume, culoare, comanda)
+ * @param isSelected true daca aceasta culoare este activa pe bec
+ * @param isEnabled true daca becul este pornit (butoanele sunt dezactivate cand e oprit)
+ * @param onClick callback apelat la selectarea culorii
+ */
+@Composable
+private fun IrColorButton(
+    irColor: com.denis.smarthome.viewmodel.IrColorButton,
+    isSelected: Boolean,
+    isEnabled: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = isEnabled, onClick = onClick)
+            .padding(8.dp)
+    ) {
+        // Cercul de culoare cu border de selectie
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(
+                    if (isEnabled) irColor.color else irColor.color.copy(alpha = 0.3f)
+                )
+                .then(
+                    if (isSelected && isEnabled) {
+                        Modifier.border(3.dp, Color.White, CircleShape)
+                    } else {
+                        Modifier.border(1.dp, Outline, CircleShape)
+                    }
+                )
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = irColor.name,
+            color = if (isSelected && isEnabled) OnBackground else OnSurface,
+            fontSize = 11.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+            textAlign = TextAlign.Center,
+            maxLines = 2
+        )
     }
 }

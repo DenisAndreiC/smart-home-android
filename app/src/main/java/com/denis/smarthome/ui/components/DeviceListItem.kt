@@ -56,30 +56,22 @@ private fun deviceIcon(deviceType: String, name: String): ImageVector {
 }
 
 /**
- * Card pentru un dispozitiv din lista cu iconita, info si switch de control.
+ * Card pentru un dispozitiv din lista cu iconita si info.
  *
  * Click-ul pe card navigheaza la ecranul de control al dispozitivului.
- * Switch-ul M3 isi consuma propriul eveniment de click si nu il propaga la card.
+ * Controlul ON/OFF se face din ecranul individual al fiecarui dispozitiv,
+ * nu din dashboard — pentru a evita desincronizarea starii.
  *
  * @param device Datele dispozitivului primite din API
- * @param onToggle Callback apelat cand utilizatorul schimba starea switch-ului
  * @param onClick Callback apelat la click pe intreaga linie (navigare la control)
  * @param modifier Modifier optional pentru stilizare externa
  */
 @Composable
 fun DeviceListItem(
     device: DeviceResponse,
-    onToggle: (Boolean) -> Unit,
     onClick: () -> Unit,
-    onDelete: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    // Derive toggle state from last_status when available, fallback to is_online
-    val isOn = when (device.last_status?.lowercase()) {
-        "on" -> true
-        "off" -> false
-        else -> device.is_online
-    }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -128,13 +120,13 @@ fun DeviceListItem(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(if (isOn) Color(0xFF4CAF50) else ErrorColor)
+                            .background(if (device.is_online) Color(0xFF4CAF50) else ErrorColor)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text = "${device.room ?: ""} • ${if (isOn) "Online" else "Offline"}",
+                    text = "${device.room ?: ""} • ${device.device_type}",
                     color = OnSurface,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -148,29 +140,13 @@ fun DeviceListItem(
                 )
             }
 
-            Spacer(modifier = Modifier.width(4.dp))
-
-            // Switch M3 pentru pornire/oprire; isi consuma propriul click, nu propaga la card
-            Switch(
-                checked = isOn,
-                onCheckedChange = onToggle,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = Primary,
-                    uncheckedThumbColor = OnSurface,
-                    uncheckedTrackColor = SurfaceVariant
-                )
+            // Sageata dreapta — indica ca dispozitivul este tappable pentru control
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = "Open control",
+                tint = OnSurface,
+                modifier = Modifier.size(24.dp)
             )
-
-            // Buton de stergere
-            IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = ErrorColor,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
         }
     }
 }
