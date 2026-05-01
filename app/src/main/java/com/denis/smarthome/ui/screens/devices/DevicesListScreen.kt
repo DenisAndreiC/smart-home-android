@@ -311,9 +311,15 @@ private fun AddDeviceDialog(
     var typeExpanded by remember { mutableStateOf(false) }
     var brandExpanded by remember { mutableStateOf(false) }
     var remoteTypeExpanded by remember { mutableStateOf(false) }
-    val deviceTypes = listOf("ir_tv", "ir_ac", "ir_rgb", "relay", "wol")
-    val remoteTypes = listOf("44-key", "24-key")
-    val tvBrands = listOf("Philips", "Samsung", "LG", "Sony", "Panasonic", "NEC")
+    val deviceTypes = listOf(
+        "TV Remote"           to "ir_tv",
+        "Air Conditioner"     to "ir_ac",
+        "RGB Bulb"            to "ir_rgb",
+        "Smart Relay"         to "relay",
+        "Wake on LAN"         to "wol"
+    )
+    val remoteTypes = listOf("22-key", "44-key", "24-key")
+    val tvBrands = listOf("Samsung", "LG", "Philips", "Sony", "Panasonic")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -354,7 +360,7 @@ private fun AddDeviceDialog(
                     onExpandedChange = { typeExpanded = it }
                 ) {
                     OutlinedTextField(
-                        value = form.deviceType,
+                        value = deviceTypes.firstOrNull { it.second == form.deviceType }?.first ?: form.deviceType,
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Device Type") },
@@ -369,15 +375,15 @@ private fun AddDeviceDialog(
                         onDismissRequest = { typeExpanded = false },
                         modifier = Modifier.background(Surface)
                     ) {
-                        deviceTypes.forEach { type ->
+                        deviceTypes.forEach { (label, typeValue) ->
                             DropdownMenuItem(
-                                text = { Text(type, color = OnBackground) },
+                                text = { Text(label, color = OnBackground) },
                                 onClick = {
-                                    val newTopic = if (type.startsWith("ir"))
+                                    val newTopic = if (typeValue.startsWith("ir"))
                                         "smarthome/devices/ir/command"
                                     else
                                         "smarthome/devices/relay/command"
-                                    onFormChange(form.copy(deviceType = type, mqttTopic = newTopic, brand = ""))
+                                    onFormChange(form.copy(deviceType = typeValue, mqttTopic = newTopic, brand = ""))
                                     typeExpanded = false
                                 }
                             )

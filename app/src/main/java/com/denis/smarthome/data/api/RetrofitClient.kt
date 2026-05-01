@@ -40,8 +40,8 @@ object RetrofitClient {
     // Use "http://10.0.2.2:8000/" for Android Emulator
     // Use "http://192.168.x.x:8000/" for physical device (replace with your Mac's IP)
     const val EMULATOR_URL = "http://10.0.2.2:8000/api/"
-    const val DEVICE_URL = "http://192.168.100.197:8000/api/"
-    var BASE_URL = EMULATOR_URL
+    const val DEVICE_URL = "http://91.98.118.24:8000/api/"
+    var BASE_URL = DEVICE_URL
         private set
 
     private var tokenManager: TokenManager? = null

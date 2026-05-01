@@ -42,6 +42,15 @@ import com.denis.smarthome.ui.theme.*
  * @param name Numele dispozitivului introdus de utilizator
  * @return Iconita [ImageVector] corespunzatoare
  */
+private fun deviceTypeLabel(deviceType: String): String = when (deviceType) {
+    "ir_tv"  -> "TV Remote"
+    "ir_ac"  -> "Air Conditioner"
+    "ir_rgb" -> "RGB Bulb"
+    "relay"  -> "Smart Relay"
+    "wol"    -> "Wake on LAN"
+    else     -> deviceType
+}
+
 private fun deviceIcon(deviceType: String, name: String): ImageVector {
     val type = deviceType.lowercase()
     val nameLower = name.lowercase()
@@ -126,7 +135,7 @@ fun DeviceListItem(
 
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text = "${device.room ?: ""} • ${device.device_type}",
+                    text = "${device.room ?: ""} • ${deviceTypeLabel(device.device_type)}",
                     color = OnSurface,
                     style = MaterialTheme.typography.bodySmall
                 )
