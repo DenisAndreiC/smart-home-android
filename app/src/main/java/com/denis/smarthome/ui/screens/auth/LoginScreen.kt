@@ -333,27 +333,6 @@ fun LoginScreen(
                 )
                 HorizontalDivider(modifier = Modifier.weight(1f), color = Outline)
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // ── Iconite biometrice decorative (fingerprint + face ID, UI only) ──
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Fingerprint,
-                    contentDescription = "Fingerprint",
-                    tint = OnSurface,
-                    modifier = Modifier.size(28.dp)
-                )
-                Icon(
-                    imageVector = Icons.Default.Face,
-                    contentDescription = "Face ID",
-                    tint = OnSurface,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
         }
     }
 

@@ -265,7 +265,8 @@ fun DevicesListScreen(
                                 device = device,
                                 onClick = {
                                     navController.navigate(NavRoutes.DeviceControl.createRoute(device.id))
-                                }
+                                },
+                                onDelete = { deviceToDelete = device.id }
                             )
                         }
                     }

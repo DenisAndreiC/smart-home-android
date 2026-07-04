@@ -317,7 +317,7 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.height(16.dp))
                             SectionTitle(title = "Suggested Routines")
                         }
-                        items(recommendations, key = { "${it.device_id}:${it.action}" }) { rec ->
+                        items(recommendations, key = { "${it.device_id}:${it.action}:${it.suggested_time}" }) { rec ->
                             val actionIcon = when {
                                 rec.action.lowercase().contains("off") -> Icons.Default.PowerSettingsNew
                                 rec.action.lowercase().contains("on")  -> Icons.Default.Lightbulb

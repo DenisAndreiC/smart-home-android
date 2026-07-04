@@ -19,7 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,8 +79,10 @@ private fun deviceIcon(deviceType: String, name: String): ImageVector {
 fun DeviceListItem(
     device: DeviceResponse,
     onClick: () -> Unit,
+    onDelete: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -149,13 +151,33 @@ fun DeviceListItem(
                 )
             }
 
-            // Sageata dreapta — indica ca dispozitivul este tappable pentru control
-            Icon(
-                Icons.Default.ChevronRight,
-                contentDescription = "Open control",
-                tint = OnSurface,
-                modifier = Modifier.size(24.dp)
-            )
+            // Buton meniu (3 puncte) — deschide dropdown cu optiunea Delete
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "More options",
+                        tint = OnSurface,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                    modifier = Modifier.background(Surface)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Delete", color = ErrorColor) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Delete, contentDescription = null, tint = ErrorColor)
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onDelete?.invoke()
+                        }
+                    )
+                }
+            }
         }
     }
 }
