@@ -15,6 +15,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.denis.smarthome.data.api.RetrofitClient
 import com.denis.smarthome.data.model.DeviceResponse
+import com.denis.smarthome.data.model.RoutineCandidate
 import com.denis.smarthome.data.model.RoutineCreate
 import com.denis.smarthome.data.model.RoutineResponse
 import com.denis.smarthome.data.model.SceneResponse
@@ -63,6 +64,14 @@ class ScenesViewModel(application: Application) : AndroidViewModel(application) 
     // Mesaj afisat dupa rularea detectiei ML (ex: "2 rutine noi detectate")
     private val _mlMessage = MutableStateFlow<String?>(null)
     val mlMessage: StateFlow<String?> = _mlMessage.asStateFlow()
+
+    // Candidatii returnati de GET /routines/detect — doar sugestii, nimic salvat inca.
+    // Utilizatorul bifeaza care sa fie create prin dialogul de selectie.
+    private val _mlCandidates = MutableStateFlow<List<RoutineCandidate>>(emptyList())
+    val mlCandidates: StateFlow<List<RoutineCandidate>> = _mlCandidates.asStateFlow()
+
+    private val _showMlCandidatesDialog = MutableStateFlow(false)
+    val showMlCandidatesDialog: StateFlow<Boolean> = _showMlCandidatesDialog.asStateFlow()
 
     /**
      * ID-ul scenei care se executa in momentul curent.
@@ -189,22 +198,58 @@ class ScenesViewModel(application: Application) : AndroidViewModel(application) 
 
     /**
      * Ruleaza detectia ML (DBSCAN) pe istoricul de comenzi al utilizatorului.
-     * Tiparele noi detectate sunt salvate pe backend ca rutine inactive (is_active=false);
-     * utilizatorul le poate revizui si activa din lista de rutine.
+     * GET /routines/detect este READ-ONLY — nu salveaza nimic, doar returneaza
+     * candidati. Daca exista candidati, deschidem dialogul de selectie; altfel
+     * afisam un mesaj ca nu s-a gasit nimic nou.
      */
     fun generateMlRoutines() {
         viewModelScope.launch {
             _isLoadingRoutines.value = true
             routineRepository.detectRoutines()
                 .onSuccess { result ->
-                    _mlMessage.value = if (result.routines_saved > 0)
-                        "${result.routines_saved} new routine(s) detected"
-                    else
-                        "No new routines detected"
-                    loadRoutines()
+                    if (result.data.isEmpty()) {
+                        _mlMessage.value = "No new routines detected"
+                    } else {
+                        _mlCandidates.value = result.data
+                        _showMlCandidatesDialog.value = true
+                    }
                 }
                 .onFailure { _error.value = it.message }
             _isLoadingRoutines.value = false
+        }
+    }
+
+    /** Inchide dialogul de selectie a candidatilor ML fara sa creeze nimic. */
+    fun dismissMlCandidatesDialog() {
+        _showMlCandidatesDialog.value = false
+        _mlCandidates.value = emptyList()
+    }
+
+    /**
+     * Creeaza doar rutinele bifate de utilizator in dialogul de selectie ML.
+     * Fiecare candidat selectat devine un POST /routines/ separat (rutina manuala,
+     * is_active=true implicit pe backend). Nu se creeaza automat toti candidatii.
+     */
+    fun createSelectedRoutineCandidates(selected: List<RoutineCandidate>) {
+        viewModelScope.launch {
+            var createdCount = 0
+            selected.forEach { candidate ->
+                routineRepository.createRoutine(
+                    RoutineCreate(
+                        name = candidate.name,
+                        device_id = candidate.device_id,
+                        action = candidate.action,
+                        value = candidate.value,
+                        trigger_time = candidate.trigger_time,
+                        days_of_week = candidate.days_of_week
+                    )
+                ).onSuccess { createdCount++ }
+                    .onFailure { _error.value = it.message }
+            }
+            _mlMessage.value = if (createdCount > 0) "$createdCount routine(s) created" else null
+            _showMlCandidatesDialog.value = false
+            _mlCandidates.value = emptyList()
+            loadRoutines()
         }
     }
 

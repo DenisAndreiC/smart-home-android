@@ -11,7 +11,6 @@
  */
 package com.denis.smarthome.ui.screens.home
 
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.BorderStroke
@@ -394,7 +393,7 @@ fun HomeScreen(
                                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         // Create Routine button
                                         TextButton(
-                                            onClick = { viewModel.createSceneFromRecommendation(rec) },
+                                            onClick = { viewModel.createRoutineFromRecommendation(rec) },
                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                                         ) {
                                             Text("Create", color = Color(0xFF00BCD4), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
@@ -444,19 +443,6 @@ fun HomeScreen(
                         }
                     }
                 }
-            }
-
-            // FAB
-            FloatingActionButton(
-                onClick = { Log.d("HomeScreen", "FAB add device clicked") },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(24.dp),
-                containerColor = Primary,
-                contentColor = Color.Black,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add device")
             }
         }
     }

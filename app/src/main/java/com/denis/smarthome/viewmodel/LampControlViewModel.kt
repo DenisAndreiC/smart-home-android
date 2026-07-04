@@ -1,10 +1,11 @@
 /**
  * LampControlViewModel.kt - ViewModel pentru controlul lampii inteligente (releu)
  *
- * Gestioneaza starea lampii: pornit/oprit cu optimistic update si revert on failure,
- * plus o lista de programari (schedules) gestionate local.
+ * Gestioneaza starea lampii: pornit/oprit cu optimistic update si revert on failure.
  * Nu afiseaza date de consum energetic — backend-ul nu are inca un calcul real al
  * acestora (kW hardcodat), asa ca nu sunt expuse in UI pentru a nu induce in eroare.
+ * Automatizarea programata se face prin Routines (ecranul Scenes), nu prin schedules
+ * locale — backend-ul nu are un endpoint de schedules per-dispozitiv.
  *
  * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
  * Autor: Denis Andrei C.
@@ -25,30 +26,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Model de date pentru o programare (scheduler) a lampii.
- *
- * Programarile sunt gestionate doar local in ViewModel (nu sunt persistate pe server).
- * Backend-ul nu are un endpoint dedicat pentru schedule-uri in aceasta versiune.
- *
- * @param name numele descriptiv al programarii (ex: "Sunset On")
- * @param time ora la care se declanseaza (ex: "6:45 PM")
- * @param repeat frecventa: "Daily", "Weekdays" etc.
- * @param isOn daca programarea este activa sau dezactivata
- * @param icon iconita afisata in UI: "sunset" sau "night"
- */
-data class Schedule(
-    val name: String,
-    val time: String,
-    val repeat: String,
-    val isOn: Boolean,
-    val icon: String  // "sunset" | "night"
-)
-
-/**
  * ViewModel pentru ecranul de control al lampii simple (tip releu).
  *
  * Spre deosebire de becul RGB, lampa are control binar (on/off) fara optiuni de culoare.
- * Contine si o sectiune de programari (schedules) pentru automatizare locala.
  *
  * @param application contextul aplicatiei
  * @param deviceId ID-ul dispozitivului releu asociat lampii
@@ -71,21 +51,6 @@ class LampControlViewModel(
     // un flash vizual de "OFF" cat timp loadDevice() reincarca datele din retea.
     private val _isOn = MutableStateFlow(initialStatus?.lowercase() == "on")
     val isOn: StateFlow<Boolean> = _isOn.asStateFlow()
-
-    /**
-     * Lista de programari initializata cu doua intrari implicite.
-     *
-     * "Sunset On" porneste lampa la apusul soarelui (6:45 PM).
-     * "Night Off" opreste lampa noaptea tarziu (11:30 PM).
-     * Programarile sunt gestionate doar in memorie, nu sunt persistate.
-     */
-    private val _schedules = MutableStateFlow(
-        listOf(
-            Schedule("Sunset On",  "6:45 PM",  "Daily", true,  "sunset"),
-            Schedule("Night Off",  "11:30 PM", "Daily", false, "night")
-        )
-    )
-    val schedules: StateFlow<List<Schedule>> = _schedules.asStateFlow()
 
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -138,27 +103,6 @@ class LampControlViewModel(
                 _error.value = it.message
             }
         }
-    }
-
-    /**
-     * Comuta starea activ/inactiv a unei programari dupa indexul sau din lista.
-     *
-     * @param index pozitia programarii in lista [_schedules]
-     */
-    fun toggleSchedule(index: Int) {
-        // Actualizam doar elementul de la indexul dat, pastrand restul neschimbat
-        _schedules.value = _schedules.value.mapIndexed { i, s ->
-            if (i == index) s.copy(isOn = !s.isOn) else s
-        }
-    }
-
-    /**
-     * Adauga o noua programare la sfarsitul listei.
-     *
-     * @param schedule programarea noua de adaugat
-     */
-    fun addSchedule(schedule: Schedule) {
-        _schedules.value = _schedules.value + schedule
     }
 
     /** Sterge mesajul de eroare curent. */

@@ -241,7 +241,24 @@ data class RoutineResponse(
     @SerializedName("created_at")      val created_at: String
 )
 
+/**
+ * Un candidat de rutina detectat de ML — NU e inca persistat pe backend.
+ * candidate_index identifica sugestia in cadrul unui singur raspuns /routines/detect
+ * (nu exista un id de baza de date pana cand utilizatorul nu alege sa il creeze).
+ */
+data class RoutineCandidate(
+    @SerializedName("device_id")       val device_id: Int,
+    val action: String,
+    val value: String?,
+    @SerializedName("trigger_time")    val trigger_time: String,
+    @SerializedName("days_of_week")    val days_of_week: String,
+    val confidence: Float,
+    val name: String,
+    @SerializedName("candidate_index") val candidate_index: Int
+)
+
 data class RoutineDetectResponse(
     @SerializedName("routines_detected") val routines_detected: Int,
-    @SerializedName("routines_saved")    val routines_saved: Int
+    @SerializedName("routines_saved")    val routines_saved: Int,
+    val data: List<RoutineCandidate>
 )

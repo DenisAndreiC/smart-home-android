@@ -2,9 +2,11 @@
  * LampControlScreen.kt - Ecran de control pentru lampa/relay inteligent
  *
  * Afiseaza un cerc hero cu border animat (teal cand pornita, gri cand oprita),
- * text de status, un switch mare pentru pornire/oprire, carduri de statistici
- * si o sectiune de programari (schedules) cu posibilitatea de a adauga noi intrari.
+ * text de status si un switch mare pentru pornire/oprire.
  * Folosit atat pentru dispozitive de tip relay cat si WoL (Wake-on-LAN).
+ *
+ * Scheduled automation is handled by Routines (in the Scenes screen), not here —
+ * there is no per-device schedules feature/endpoint on the backend.
  *
  * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
  * Autor: Denis Andrei C.
@@ -17,7 +19,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -30,22 +31,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.denis.smarthome.data.model.DeviceResponse
 import com.denis.smarthome.ui.components.LargeToggleSwitch
-import com.denis.smarthome.ui.components.ScheduleItem
 import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.LampControlViewModel
-import com.denis.smarthome.viewmodel.Schedule
 
 /**
  * Ecranul principal de control al lampii/relay-ului.
- * Afiseaza starea curenta (ON/OFF), permite pornirea/oprirea prin LargeToggleSwitch
- * si gestioneaza programarile (schedules) salvate local in ViewModel.
+ * Afiseaza starea curenta (ON/OFF) si permite pornirea/oprirea prin LargeToggleSwitch.
  *
  * @param navController pentru navigare inapoi
  * @param device datele dispozitivului (nume si camera)
@@ -62,12 +59,10 @@ fun LampControlScreen(
         factory = LampControlViewModel.Factory(app, deviceId, device.last_status)
     )
     val isOn       by viewModel.isOn.collectAsState()
-    val schedules  by viewModel.schedules.collectAsState()
     val isDeleted  by viewModel.isDeleted.collectAsState()
 
-    var showMenu              by remember { mutableStateOf(false) }
-    var showAddScheduleDialog by remember { mutableStateOf(false) }
-    var showDeleteDialog      by remember { mutableStateOf(false) }
+    var showMenu         by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(isDeleted) {
         if (isDeleted) navController.popBackStack()
@@ -92,16 +87,6 @@ fun LampControlScreen(
                     Text("Cancel", color = OnSurface)
                 }
             }
-        )
-    }
-
-    if (showAddScheduleDialog) {
-        AddScheduleDialog(
-            onConfirm = { schedule ->
-                viewModel.addSchedule(schedule)
-                showAddScheduleDialog = false
-            },
-            onDismiss = { showAddScheduleDialog = false }
         )
     }
 
@@ -209,164 +194,8 @@ fun LampControlScreen(
                     onCheckedChange = { viewModel.togglePower() }
                 )
 
-                // ── Schedules ─────────────────────────────────────────────────
-                // Lista de programari salvate local in ViewModel.
-                // Butonul "Add New" deschide AddScheduleDialog pentru adaugarea unei noi programari.
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "Schedules",
-                            color = OnBackground,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        TextButton(onClick = { showAddScheduleDialog = true }) {
-                            Icon(Icons.Default.Add, contentDescription = null, tint = Primary, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Add New", color = Primary, style = MaterialTheme.typography.labelLarge)
-                        }
-                    }
-
-                    schedules.forEachIndexed { index, schedule ->
-                        ScheduleItem(
-                            schedule = schedule,
-                            onToggle = { viewModel.toggleSchedule(index) }
-                        )
-                    }
-                }
-
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
     }
-}
-
-/**
- * Dialog pentru adaugarea unei noi programari a lampii.
- * Contine un formular cu un singur pas cu campurile:
- * - Nume programare (ex: "Sunset On")
- * - Ora (ex: "6:45 PM")
- * - Actiune: Turn ON / Turn OFF (Switch)
- * - Repetare: dropdown cu optiunile Daily / Weekdays / Once
- *
- * La confirmare construieste un obiect Schedule si il trimite prin callback onConfirm.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AddScheduleDialog(
-    onConfirm: (Schedule) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var scheduleName by remember { mutableStateOf("") }
-    var timeText     by remember { mutableStateOf("") }
-    var isOnAction   by remember { mutableStateOf(true) }
-    var repeatExpanded by remember { mutableStateOf(false) }
-    var repeat       by remember { mutableStateOf("Daily") }
-    val repeatOptions = listOf("Daily", "Weekdays", "Once")
-
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = Primary,
-        focusedLabelColor = Primary,
-        unfocusedBorderColor = Outline,
-        unfocusedLabelColor = OnSurface,
-        cursorColor = Primary,
-        focusedTextColor = OnBackground,
-        unfocusedTextColor = OnBackground
-    )
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Surface,
-        titleContentColor = OnBackground,
-        textContentColor = OnSurface,
-        title = { Text("Add Schedule", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = scheduleName,
-                    onValueChange = { scheduleName = it },
-                    label = { Text("Name (e.g. Sunset On)") },
-                    singleLine = true,
-                    colors = fieldColors,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = timeText,
-                    onValueChange = { timeText = it },
-                    label = { Text("Time (e.g. 6:45 PM)") },
-                    singleLine = true,
-                    colors = fieldColors,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Action", color = OnSurface)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (isOnAction) "Turn ON" else "Turn OFF", color = Primary, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(8.dp))
-                        Switch(
-                            checked = isOnAction,
-                            onCheckedChange = { isOnAction = it },
-                            colors = SwitchDefaults.colors(
-                                checkedTrackColor = Primary,
-                                checkedThumbColor = Color.White,
-                                uncheckedTrackColor = SurfaceVariant,
-                                uncheckedThumbColor = OnSurface
-                            )
-                        )
-                    }
-                }
-                ExposedDropdownMenuBox(expanded = repeatExpanded, onExpandedChange = { repeatExpanded = it }) {
-                    OutlinedTextField(
-                        value = repeat,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Repeat") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = repeatExpanded) },
-                        colors = fieldColors,
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = repeatExpanded,
-                        onDismissRequest = { repeatExpanded = false },
-                        modifier = Modifier.background(Surface)
-                    ) {
-                        repeatOptions.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option, color = OnBackground) },
-                                onClick = { repeat = option; repeatExpanded = false }
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val name = scheduleName.ifBlank { "New Schedule" }
-                    val time = timeText.ifBlank { "--:-- --" }
-                    val icon = if (isOnAction) "sunset" else "night"
-                    onConfirm(Schedule(name, time, repeat, isOnAction, icon))
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Primary),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Add", color = Color.Black, fontWeight = FontWeight.SemiBold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel", color = OnSurface) }
-        }
-    )
 }

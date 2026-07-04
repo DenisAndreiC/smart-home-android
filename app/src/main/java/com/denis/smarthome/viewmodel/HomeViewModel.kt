@@ -202,26 +202,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Creates a scene from a routine recommendation via POST /api/scenes/.
-     * The scene contains a single action for the recommended device/action pair.
-     * On success, reloads scenes so it appears in Quick Actions.
+     * Creates a Routine from a dashboard ML recommendation via POST /api/routines/.
+     * This must create a Routine (not a Scene) so it shows up in the Routines tab,
+     * not the Scenes tab — the recommendation only has device_id/action/suggested_time,
+     * so value is left null and days_of_week defaults to every day (the simpler
+     * /ml/recommendations endpoint does not return specific days like /routines/detect does).
      */
-    fun createSceneFromRecommendation(recommendation: RoutineRecommendation) {
+    fun createRoutineFromRecommendation(recommendation: RoutineRecommendation) {
         viewModelScope.launch {
             runCatching {
-                val action = com.denis.smarthome.data.model.SceneAction(
-                    device_id = recommendation.device_id,
-                    command_type = recommendation.action
-                )
-                val request = com.denis.smarthome.data.model.SceneRequest(
+                val request = com.denis.smarthome.data.model.RoutineCreate(
                     name = "${recommendation.device_name} at ${recommendation.suggested_time}",
-                    actions = listOf(action)
+                    device_id = recommendation.device_id,
+                    action = recommendation.action,
+                    value = null,
+                    trigger_time = recommendation.suggested_time,
+                    days_of_week = "1,2,3,4,5,6,7"
                 )
-                RetrofitClient.apiService.createScene(request)
+                RetrofitClient.apiService.createRoutine(request)
             }.onSuccess {
                 dismissRecommendation(recommendation)
-                runCatching { RetrofitClient.apiService.getScenes() }
-                    .onSuccess { _scenes.value = it }
             }.onFailure { _error.value = it.message }
         }
     }

@@ -21,8 +21,10 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -38,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.denis.smarthome.data.model.DeviceResponse
+import com.denis.smarthome.data.model.RoutineCandidate
 import com.denis.smarthome.data.model.RoutineResponse
 import com.denis.smarthome.data.model.SceneResponse
 import com.denis.smarthome.ui.navigation.NavRoutes
@@ -117,6 +120,8 @@ fun ScenesScreen(
     val devices             by viewModel.devices.collectAsState()
     val isLoadingRoutines   by viewModel.isLoadingRoutines.collectAsState()
     val mlMessage           by viewModel.mlMessage.collectAsState()
+    val mlCandidates        by viewModel.mlCandidates.collectAsState()
+    val showMlCandidatesDialog by viewModel.showMlCandidatesDialog.collectAsState()
 
     var selectedTab by remember { mutableStateOf(0) }
 
@@ -174,6 +179,16 @@ fun ScenesScreen(
                 showCreateRoutineDialog = false
             },
             onDismiss = { showCreateRoutineDialog = false }
+        )
+    }
+
+    // Dialog de selectie a candidatilor ML — GET /routines/detect nu salveaza nimic,
+    // utilizatorul bifeaza care sugestii sa devina rutine reale
+    if (showMlCandidatesDialog) {
+        RoutineCandidatesDialog(
+            candidates = mlCandidates,
+            onConfirm = { selected -> viewModel.createSelectedRoutineCandidates(selected) },
+            onDismiss = { viewModel.dismissMlCandidatesDialog() }
         )
     }
 
@@ -367,8 +382,8 @@ private fun RoutinesTab(
         ) {
             Text(
                 "Routines run automatically at a scheduled time and days — created manually " +
-                    "or suggested by ML from your usage patterns. New routines start inactive; " +
-                    "turn them on below to let the scheduler run them.",
+                    "or picked from ML suggestions based on your usage patterns. Routines are " +
+                    "active as soon as they're created; use the switch below to pause one.",
                 color = OnSurface,
                 fontSize = 12.sp
             )
@@ -674,6 +689,91 @@ private fun CreateRoutineDialog(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text("Create", color = Color.Black, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = OnSurface) }
+        }
+    )
+}
+
+/**
+ * Dialog de selectie a candidatilor de rutina detectati de ML.
+ *
+ * GET /routines/detect este read-only si returneaza doar sugestii (fara sa salveze
+ * nimic). Utilizatorul bifeaza checkbox-urile pentru candidatii doriti, iar la
+ * "Create Selected" se trimite cate un POST /routines/ pentru fiecare bifat.
+ * Toti candidatii sunt bifati implicit pentru a pastra fluxul rapid, dar userul
+ * poate debifa oricare inainte de a confirma.
+ */
+@Composable
+private fun RoutineCandidatesDialog(
+    candidates: List<RoutineCandidate>,
+    onConfirm: (List<RoutineCandidate>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val selected = remember(candidates) {
+        mutableStateMapOf<Int, Boolean>().apply {
+            candidates.forEach { put(it.candidate_index, true) }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Surface,
+        titleContentColor = OnBackground,
+        textContentColor = OnSurface,
+        title = { Text("Select Routines to Create", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    "ML found these repeating patterns in your command history. " +
+                        "Pick which ones to save as routines.",
+                    color = OnSurface,
+                    fontSize = 12.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                candidates.forEach { candidate ->
+                    val isChecked = selected[candidate.candidate_index] ?: false
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { selected[candidate.candidate_index] = !isChecked }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = isChecked,
+                            onCheckedChange = { selected[candidate.candidate_index] = it },
+                            colors = CheckboxDefaults.colors(checkedColor = Primary, uncheckedColor = Outline)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(candidate.name, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(
+                                "${candidate.trigger_time} • ${(candidate.confidence * 100).toInt()}% confidence",
+                                color = OnSurface,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onConfirm(candidates.filter { selected[it.candidate_index] == true })
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Create Selected", color = Color.Black, fontWeight = FontWeight.SemiBold)
             }
         },
         dismissButton = {
