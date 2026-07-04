@@ -210,3 +210,38 @@ data class MLSettingsResponse(
     @SerializedName("min_occurrences") val min_occurrences: Int,
     @SerializedName("min_days")        val min_days: Int = 4
 )
+
+// ── Routines ───────────────────────────────────────────────────────────────────
+
+data class RoutineCreate(
+    val name: String,
+    @SerializedName("device_id")    val device_id: Int,
+    val action: String,
+    val value: String? = null,
+    @SerializedName("trigger_time") val trigger_time: String,
+    @SerializedName("days_of_week") val days_of_week: String
+)
+
+data class RoutineToggle(
+    @SerializedName("is_active") val is_active: Boolean
+)
+
+data class RoutineResponse(
+    val id: Int,
+    @SerializedName("user_id")         val user_id: Int,
+    val name: String,
+    @SerializedName("device_id")       val device_id: Int,
+    val action: String,
+    val value: String?,
+    @SerializedName("trigger_time")    val trigger_time: String,
+    @SerializedName("days_of_week")    val days_of_week: String,
+    @SerializedName("is_active")       val is_active: Boolean,
+    @SerializedName("is_ml_suggested") val is_ml_suggested: Boolean,
+    val confidence: Float?,
+    @SerializedName("created_at")      val created_at: String
+)
+
+data class RoutineDetectResponse(
+    @SerializedName("routines_detected") val routines_detected: Int,
+    @SerializedName("routines_saved")    val routines_saved: Int
+)

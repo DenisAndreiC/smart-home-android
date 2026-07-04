@@ -1,9 +1,10 @@
 /**
- * ScenesScreen.kt - Ecran pentru gestionarea scenelor de automatizare smart home
+ * ScenesScreen.kt - Ecran pentru gestionarea scenelor si rutinelor de automatizare
  *
- * Afiseaza o grila de scene disponibile, fiecare putand fi executata sau stearsa.
- * Include logica de vizualizare dinamica (icon si culori) in functie de numele scenei.
- * Navigheaza catre SceneEditorScreen pentru crearea de scene noi.
+ * Contine doua sectiuni distincte, separate prin tab-uri:
+ * - Scene: seturi de actiuni declansate manual de utilizator (buton "Activate").
+ * - Rutine: automatizari declansate automat de scheduler-ul backend la o ora si
+ *   zile programate, fie create manual, fie sugerate de algoritmul ML (DBSCAN).
  *
  * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
  * Autor: Denis Andrei C.
@@ -12,10 +13,14 @@ package com.denis.smarthome.ui.screens.scenes
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.denis.smarthome.data.model.DeviceResponse
+import com.denis.smarthome.data.model.RoutineResponse
 import com.denis.smarthome.data.model.SceneResponse
 import com.denis.smarthome.ui.navigation.NavRoutes
 import com.denis.smarthome.ui.theme.*
@@ -72,9 +79,26 @@ private fun sceneVisuals(name: String, iconStr: String?): SceneVisuals {
 }
 
 /**
- * Ecranul principal al sectiunii Scene.
- * Afiseaza o grila de carduri cu scene, permite executarea si stergerea lor.
- * Un buton flotant (FAB) navigheaza catre editorul de scene pentru creare noua.
+ * Formateaza sirul "days_of_week" (ex: "1,2,3,4,5") intr-un text lizibil.
+ * Recunoaste tiparele comune "Every day" si "Weekdays"/"Weekend", altfel
+ * listeaza zilele abreviate in ordine.
+ */
+private fun formatDaysOfWeek(daysOfWeek: String): String {
+    val dayLabels = mapOf(1 to "Mon", 2 to "Tue", 3 to "Wed", 4 to "Thu", 5 to "Fri", 6 to "Sat", 7 to "Sun")
+    val days = daysOfWeek.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+    return when (days) {
+        setOf(1, 2, 3, 4, 5, 6, 7) -> "Every day"
+        setOf(1, 2, 3, 4, 5) -> "Weekdays"
+        setOf(6, 7) -> "Weekend"
+        else -> days.sorted().mapNotNull { dayLabels[it] }.joinToString(", ")
+    }
+}
+
+/**
+ * Ecranul principal al sectiunii Scene & Rutine.
+ * Foloseste un TabRow pentru a separa clar cele doua concepte:
+ * - tab 0: Scene (grila existenta, executie manuala)
+ * - tab 1: Rutine (lista de automatizari cu toggle activ/inactiv)
  *
  * @param navController controllerul de navigare Compose
  * @param viewModel ScenesViewModel furnizat prin injectare Compose
@@ -89,8 +113,22 @@ fun ScenesScreen(
     val isLoading       by viewModel.isLoading.collectAsState()
     val executingId     by viewModel.executingSceneId.collectAsState()
 
+    val routines            by viewModel.routines.collectAsState()
+    val devices             by viewModel.devices.collectAsState()
+    val isLoadingRoutines   by viewModel.isLoadingRoutines.collectAsState()
+    val mlMessage           by viewModel.mlMessage.collectAsState()
+
+    var selectedTab by remember { mutableStateOf(0) }
+
     // sceneToDelete retine scena selectata pentru confirmare inainte de stergere
     var sceneToDelete by remember { mutableStateOf<SceneResponse?>(null) }
+    var routineToDelete by remember { mutableStateOf<RoutineResponse?>(null) }
+    var showCreateRoutineDialog by remember { mutableStateOf(false) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(mlMessage) {
+        mlMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearMlMessage() }
+    }
 
     // Dialog de confirmare stergere scena — apare doar cand sceneToDelete != null
     sceneToDelete?.let { scene ->
@@ -110,17 +148,50 @@ fun ScenesScreen(
         )
     }
 
+    // Dialog de confirmare stergere rutina
+    routineToDelete?.let { routine ->
+        AlertDialog(
+            onDismissRequest = { routineToDelete = null },
+            containerColor = Surface,
+            title = { Text("Delete Routine", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text  = { Text("Delete \"${routine.name}\"? This cannot be undone.", color = OnSurface) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.deleteRoutine(routine.id); routineToDelete = null }) {
+                    Text("Delete", color = ErrorColor, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { routineToDelete = null }) { Text("Cancel", color = OnSurface) }
+            }
+        )
+    }
+
+    if (showCreateRoutineDialog) {
+        CreateRoutineDialog(
+            devices = devices,
+            onConfirm = { name, deviceId, action, value, triggerTime, daysOfWeek ->
+                viewModel.createRoutine(name, deviceId, action, value, triggerTime, daysOfWeek)
+                showCreateRoutineDialog = false
+            },
+            onDismiss = { showCreateRoutineDialog = false }
+        )
+    }
+
     Scaffold(
         containerColor = Background,
-        // FAB pentru navigare catre editorul de scene (creare noua)
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        // FAB context-sensibil: creeaza o scena noua pe tab-ul Scenes, o rutina manuala pe tab-ul Routines
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { navController.navigate(NavRoutes.SceneEditor.createRoute()) },
+                onClick = {
+                    if (selectedTab == 0) navController.navigate(NavRoutes.SceneEditor.createRoute())
+                    else showCreateRoutineDialog = true
+                },
                 containerColor = Primary,
                 contentColor = Color.Black,
                 shape = CircleShape
             ) {
-                Icon(Icons.Default.Add, contentDescription = "New Scene")
+                Icon(Icons.Default.Add, contentDescription = if (selectedTab == 0) "New Scene" else "New Routine")
             }
         }
     ) { innerPadding ->
@@ -139,81 +210,476 @@ fun ScenesScreen(
             ) {
                 Column(modifier = Modifier.align(Alignment.CenterStart)) {
                     Text(
-                        "Scenes",
+                        "Scenes & Routines",
                         color = OnBackground,
-                        fontSize = 24.sp,
+                        fontSize = 22.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "Automate your home with one tap",
+                        if (selectedTab == 0) "Automate your home with one tap"
+                        else "Automations that run on their own schedule",
                         color = OnSurface,
-                        fontSize = 14.sp
+                        fontSize = 13.sp
                     )
                 }
                 IconButton(
-                    onClick = { viewModel.loadScenes() },
+                    onClick = { if (selectedTab == 0) viewModel.loadScenes() else viewModel.loadRoutines() },
                     modifier = Modifier.align(Alignment.CenterEnd)
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Primary)
                 }
             }
 
-            // ── Continut principal: loading / lista goala / grila de scene ────
-            when {
-                isLoading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Primary)
-                    }
-                }
-                scenes.isEmpty() -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = OnSurface.copy(alpha = 0.4f),
-                                modifier = Modifier.size(72.dp)
-                            )
-                            Text("No scenes yet", color = OnSurface, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                            Text("Create your first automation", color = OnSurface.copy(alpha = 0.6f), fontSize = 14.sp)
-                            Button(
-                                onClick = { navController.navigate(NavRoutes.SceneEditor.createRoute()) },
-                                colors = ButtonDefaults.buttonColors(containerColor = Primary),
-                                shape = RoundedCornerShape(20.dp)
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Create Scene", color = Color.Black, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    }
-                }
-                else -> {
-                    // Grila 2 coloane cu carduri de scene
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        contentPadding = PaddingValues(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxSize()
+            // ── Tabs: Scene / Rutine ─────────────────────────────────────────
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = Surface,
+                contentColor = Primary
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text("Scenes", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) },
+                    selectedContentColor = Primary,
+                    unselectedContentColor = OnSurface
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { Text("Routines", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) },
+                    selectedContentColor = Primary,
+                    unselectedContentColor = OnSurface
+                )
+            }
+
+            when (selectedTab) {
+                0 -> ScenesTab(
+                    scenes = scenes,
+                    isLoading = isLoading,
+                    executingId = executingId,
+                    onExecute = { viewModel.executeScene(it) },
+                    onDelete = { sceneToDelete = it },
+                    onEdit = { navController.navigate(NavRoutes.SceneEditor.createRoute(it)) },
+                    onCreate = { navController.navigate(NavRoutes.SceneEditor.createRoute()) }
+                )
+                1 -> RoutinesTab(
+                    routines = routines,
+                    devices = devices,
+                    isLoading = isLoadingRoutines,
+                    onToggle = { id, active -> viewModel.toggleRoutine(id, active) },
+                    onDelete = { routineToDelete = it },
+                    onGenerateMl = { viewModel.generateMlRoutines() },
+                    onCreateManual = { showCreateRoutineDialog = true }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Continutul tab-ului "Scenes": grila existenta de carduri cu executie manuala.
+ */
+@Composable
+private fun ScenesTab(
+    scenes: List<SceneResponse>,
+    isLoading: Boolean,
+    executingId: Int?,
+    onExecute: (Int) -> Unit,
+    onDelete: (SceneResponse) -> Unit,
+    onEdit: (Int) -> Unit,
+    onCreate: () -> Unit
+) {
+    when {
+        isLoading -> {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Primary)
+            }
+        }
+        scenes.isEmpty() -> {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = OnSurface.copy(alpha = 0.4f),
+                        modifier = Modifier.size(72.dp)
+                    )
+                    Text("No scenes yet", color = OnSurface, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Create your first automation", color = OnSurface.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Button(
+                        onClick = onCreate,
+                        colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                        shape = RoundedCornerShape(20.dp)
                     ) {
-                        items(scenes, key = { it.id }) { scene ->
-                            SceneCard(
-                                scene = scene,
-                                isExecuting = executingId == scene.id,
-                                onExecute = { viewModel.executeScene(scene.id) },
-                                onDelete = { sceneToDelete = scene },
-                                onEdit = { navController.navigate(NavRoutes.SceneEditor.createRoute(scene.id)) }
-                            )
+                        Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Create Scene", color = Color.Black, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+        else -> {
+            // Grila 2 coloane cu carduri de scene
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                contentPadding = PaddingValues(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(scenes, key = { it.id }) { scene ->
+                    SceneCard(
+                        scene = scene,
+                        isExecuting = executingId == scene.id,
+                        onExecute = { onExecute(scene.id) },
+                        onDelete = { onDelete(scene) },
+                        onEdit = { onEdit(scene.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Continutul tab-ului "Routines": text explicativ, actiuni de generare/creare
+ * si lista de rutine cu toggle activ/inactiv.
+ */
+@Composable
+private fun RoutinesTab(
+    routines: List<RoutineResponse>,
+    devices: List<DeviceResponse>,
+    isLoading: Boolean,
+    onToggle: (Int, Boolean) -> Unit,
+    onDelete: (RoutineResponse) -> Unit,
+    onGenerateMl: () -> Unit,
+    onCreateManual: () -> Unit
+) {
+    val deviceNames = remember(devices) { devices.associate { it.id to it.name } }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                "Routines run automatically at a scheduled time and days — created manually " +
+                    "or suggested by ML from your usage patterns. New routines start inactive; " +
+                    "turn them on below to let the scheduler run them.",
+                color = OnSurface,
+                fontSize = 12.sp
+            )
+            Button(
+                onClick = onGenerateMl,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariant),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Generate Routine (ML)", color = Primary, fontWeight = FontWeight.SemiBold)
+            }
+        }
+
+        when {
+            isLoading -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Primary)
+                }
+            }
+            routines.isEmpty() -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = OnSurface.copy(alpha = 0.4f),
+                            modifier = Modifier.size(72.dp)
+                        )
+                        Text("No routines yet", color = OnSurface, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Create one manually or generate from ML", color = OnSurface.copy(alpha = 0.6f), fontSize = 14.sp)
+                        Button(
+                            onClick = onCreateManual,
+                            colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Create Routine", color = Color.Black, fontWeight = FontWeight.SemiBold)
                         }
+                    }
+                }
+            }
+            else -> {
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(routines, key = { it.id }) { routine ->
+                        RoutineCard(
+                            routine = routine,
+                            deviceName = deviceNames[routine.device_id] ?: "Unknown device",
+                            onToggle = { active -> onToggle(routine.id, active) },
+                            onDelete = { onDelete(routine) }
+                        )
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * Card compozabil pentru o singura rutina.
+ * Afiseaza numele, dispozitivul tinta, ora si zilele de declansare, si un switch
+ * activ/inactiv legat direct de PUT /routines/{id}/toggle prin callback-ul onToggle.
+ */
+@Composable
+private fun RoutineCard(
+    routine: RoutineResponse,
+    deviceName: String,
+    onToggle: (Boolean) -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Surface),
+        shape = RoundedCornerShape(14.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(if (routine.is_ml_suggested) Color(0xFF2A1A2A) else Color(0xFF1A2A35)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (routine.is_ml_suggested) Icons.Default.AutoAwesome else Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = if (routine.is_ml_suggested) Color(0xFFE040FB) else Primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(routine.name, color = OnBackground, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    if (routine.is_ml_suggested) {
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF2A1A2A))
+                                .padding(horizontal = 6.dp, vertical = 1.dp)
+                        ) {
+                            Text("ML", color = Color(0xFFE040FB), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                Text(
+                    "$deviceName • ${routine.action}${routine.value?.let { " $it" } ?: ""}",
+                    color = OnSurface,
+                    fontSize = 12.sp
+                )
+                Text(
+                    "${routine.trigger_time} • ${formatDaysOfWeek(routine.days_of_week)}",
+                    color = OnSurface.copy(alpha = 0.7f),
+                    fontSize = 12.sp
+                )
+            }
+            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = ErrorColor, modifier = Modifier.size(18.dp))
+            }
+            Switch(
+                checked = routine.is_active,
+                onCheckedChange = onToggle,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = Primary,
+                    checkedThumbColor = Color.White,
+                    uncheckedTrackColor = SurfaceVariant,
+                    uncheckedThumbColor = OnSurface
+                )
+            )
+        }
+    }
+}
+
+/**
+ * Dialog pentru crearea manuala a unei rutine.
+ * Restrans la actiunea power on/off pentru simplitate (cel mai comun caz de utilizare
+ * pentru automatizari programate); ora este validata cu regex HH:MM (24h) conform
+ * schemei RoutineCreate de pe backend.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateRoutineDialog(
+    devices: List<DeviceResponse>,
+    onConfirm: (name: String, deviceId: Int, action: String, value: String?, triggerTime: String, daysOfWeek: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var selectedDevice by remember { mutableStateOf<DeviceResponse?>(devices.firstOrNull()) }
+    var deviceExpanded by remember { mutableStateOf(false) }
+    var isOnAction by remember { mutableStateOf(true) }
+    var triggerTime by remember { mutableStateOf("") }
+    var selectedDays by remember { mutableStateOf(setOf(1, 2, 3, 4, 5, 6, 7)) }
+
+    val timeRegex = remember { Regex("^([01]\\d|2[0-3]):[0-5]\\d$") }
+    val isTimeValid = timeRegex.matches(triggerTime)
+    val canSave = name.isNotBlank() && selectedDevice != null && isTimeValid && selectedDays.isNotEmpty()
+
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = Primary,
+        focusedLabelColor = Primary,
+        unfocusedBorderColor = Outline,
+        unfocusedLabelColor = OnSurface,
+        cursorColor = Primary,
+        focusedTextColor = OnBackground,
+        unfocusedTextColor = OnBackground
+    )
+
+    val dayOptions = listOf(1 to "Mon", 2 to "Tue", 3 to "Wed", 4 to "Thu", 5 to "Fri", 6 to "Sat", 7 to "Sun")
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Surface,
+        titleContentColor = OnBackground,
+        textContentColor = OnSurface,
+        title = { Text("New Routine", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Routine Name") },
+                    placeholder = { Text("e.g. Turn off lamp at night") },
+                    singleLine = true,
+                    colors = fieldColors,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (devices.isEmpty()) {
+                    Text("No devices available. Add a device first.", color = OnSurface)
+                } else {
+                    ExposedDropdownMenuBox(expanded = deviceExpanded, onExpandedChange = { deviceExpanded = it }) {
+                        OutlinedTextField(
+                            value = selectedDevice?.name ?: "Choose a device...",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Device") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(deviceExpanded) },
+                            colors = fieldColors,
+                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = deviceExpanded,
+                            onDismissRequest = { deviceExpanded = false },
+                            modifier = Modifier.background(Surface)
+                        ) {
+                            devices.forEach { device ->
+                                DropdownMenuItem(
+                                    text = { Text(device.name, color = OnBackground) },
+                                    onClick = { selectedDevice = device; deviceExpanded = false }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Action", color = OnSurface)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (isOnAction) "Turn ON" else "Turn OFF", color = Primary, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.width(8.dp))
+                        Switch(
+                            checked = isOnAction,
+                            onCheckedChange = { isOnAction = it },
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = Primary,
+                                checkedThumbColor = Color.White,
+                                uncheckedTrackColor = SurfaceVariant,
+                                uncheckedThumbColor = OnSurface
+                            )
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = triggerTime,
+                    onValueChange = { if (it.length <= 5) triggerTime = it },
+                    label = { Text("Trigger Time (24h, e.g. 07:30)") },
+                    isError = triggerTime.isNotEmpty() && !isTimeValid,
+                    singleLine = true,
+                    colors = fieldColors,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text("Repeat on", color = OnSurface, style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    dayOptions.forEach { (day, label) ->
+                        val isSelected = day in selectedDays
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(if (isSelected) PrimaryContainer else SurfaceVariant)
+                                .border(1.dp, if (isSelected) Primary else Outline, CircleShape)
+                                .clickable {
+                                    selectedDays = if (isSelected) selectedDays - day else selectedDays + day
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                label.take(2),
+                                color = if (isSelected) Primary else OnSurface,
+                                fontSize = 10.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val device = selectedDevice ?: return@Button
+                    onConfirm(
+                        name,
+                        device.id,
+                        "power",
+                        if (isOnAction) "on" else "off",
+                        triggerTime,
+                        selectedDays.sorted().joinToString(",")
+                    )
+                },
+                enabled = canSave,
+                colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Create", color = Color.Black, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = OnSurface) }
+        }
+    )
 }
 
 /**

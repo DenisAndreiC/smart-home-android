@@ -76,6 +76,23 @@ interface ApiService {
     @DELETE("scenes/{id}")
     suspend fun deleteScene(@Path("id") id: Int)
 
+    // ── Routines ──────────────────────────────────────────────────────────────
+
+    @GET("routines/")
+    suspend fun getRoutines(): List<RoutineResponse>
+
+    @POST("routines/")
+    suspend fun createRoutine(@Body body: RoutineCreate): RoutineResponse
+
+    @GET("routines/detect")
+    suspend fun detectRoutines(): RoutineDetectResponse
+
+    @PUT("routines/{id}/toggle")
+    suspend fun toggleRoutine(@Path("id") id: Int, @Body body: RoutineToggle): RoutineResponse
+
+    @DELETE("routines/{id}")
+    suspend fun deleteRoutine(@Path("id") id: Int)
+
     // ── Dashboard ─────────────────────────────────────────────────────────────
 
     @GET("dashboard/stats")

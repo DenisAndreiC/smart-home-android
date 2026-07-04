@@ -54,9 +54,6 @@ data class RoomInfo(
  * Lista de camere ([rooms]) nu vine direct din API, ci este construita prin groupBy pe lista
  * de dispozitive, extragand camerele unice si numarand dispozitivele active per camera.
  *
- * Consumul energetic ([energyKwh]) este estimat local pe baza tipului fiecarui dispozitiv
- * activ si un numar de ore de utilizare/zi: TV=0.1kW, AC=1.5kW, RGB=0.01kW, relay=0.05kW.
- *
  * Numarul de notificari necitite ([unreadNotificationCount]) este incarcat la fiecare
  * refresh si afisat pe badge-ul clopotelului din header.
  */
@@ -84,10 +81,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _unreadNotificationCount = MutableStateFlow(0)
     val unreadNotificationCount: StateFlow<Int> = _unreadNotificationCount.asStateFlow()
-
-    // Estimated daily energy consumption in kWh based on active devices
-    private val _energyKwh = MutableStateFlow(0.0)
-    val energyKwh: StateFlow<Double> = _energyKwh.asStateFlow()
 
     // User scenes loaded from GET /api/scenes/ — shown as Quick Action chips in dashboard
     private val _scenes = MutableStateFlow<List<SceneResponse>>(emptyList())
@@ -167,24 +160,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                             activeCount = devs.count { it.is_online }
                         )
                     }
-
-                // Calcul consum estimat zilnic: pentru fiecare dispozitiv activ,
-                // putere (kW) * 8 ore/zi. Statusul "activ" vine din last_status cand exista.
-                val activeDevices = devices.filter {
-                    it.last_status?.lowercase() == "on" || (it.last_status == null && it.is_online)
-                }
-                val kwhEstimate = activeDevices.sumOf { device ->
-                    val typeL = device.device_type.lowercase()
-                    val nameL = device.name.lowercase()
-                    val powerKw = when {
-                        typeL == "ir_ac" || nameL.contains("ac") || nameL.contains("air") -> 1.5
-                        typeL == "ir_tv" || nameL.contains("tv") -> 0.1
-                        typeL == "ir_rgb" || nameL.contains("rgb") || nameL.contains("bulb") -> 0.01
-                        else -> 0.05
-                    }
-                    powerKw * 8.0 // 8 ore/zi estimat
-                }
-                _energyKwh.value = kwhEstimate
             }
 
             // Numarul de notificari necitite pentru badge-ul clopotelului din header

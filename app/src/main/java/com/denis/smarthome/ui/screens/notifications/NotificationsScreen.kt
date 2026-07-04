@@ -3,7 +3,7 @@
  *
  * Afiseaza lista de notificari primite de la backend, ordonate cronologic.
  * Notificarile necitite sunt evidentiate vizual (bold, punct albastru, fundal teal).
- * Timestamp-ul este formatat din ISO 8601 (T eliminat) pentru lizibilitate.
+ * Timestamp-ul ISO 8601 (cu offset UTC) este convertit la ora locala a telefonului.
  *
  * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
  * Autor: Denis Andrei C.
@@ -31,6 +31,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.denis.smarthome.data.model.NotificationResponse
 import com.denis.smarthome.ui.theme.*
+import com.denis.smarthome.util.formatIsoToLocalDateTime
 import com.denis.smarthome.viewmodel.NotificationsViewModel
 
 /**
@@ -132,8 +133,8 @@ fun NotificationsScreen(
  * - Necitita: fundal PrimaryContainer, text bold, punct albastru pe dreapta
  * - Citita: fundal SurfaceVariant, text normal, fara punct
  *
- * Timestamp-ul ISO 8601 (ex: "2025-03-17T14:30:00") este trunchiat la primele
- * 16 caractere si litera T este inlocuita cu spatiu: "2025-03-17 14:30".
+ * Timestamp-ul ISO 8601 (ex: "2025-03-17T18:30:00+00:00") este convertit la
+ * ora locala a telefonului prin [formatIsoToLocalDateTime].
  *
  * @param notification datele notificarii primite din API
  */
@@ -174,9 +175,9 @@ private fun NotificationItem(notification: NotificationResponse) {
                     fontWeight = if (notification.is_read) FontWeight.Normal else FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                // Timestamp: "2025-03-17T14:30" -> "2025-03-17 14:30"
+                // Timestamp ISO 8601 cu offset UTC, convertit la ora locala a telefonului
                 Text(
-                    text = notification.created_at.take(16).replace("T", " "),
+                    text = formatIsoToLocalDateTime(notification.created_at),
                     color = OnSurface.copy(alpha = 0.6f),
                     fontSize = 11.sp
                 )

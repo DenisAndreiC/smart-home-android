@@ -3,8 +3,8 @@
  *
  * Gestioneaza starea lampii: pornit/oprit cu optimistic update si revert on failure,
  * plus o lista de programari (schedules) gestionate local.
- * Consumul energetic (powerWatts, usageHours) este hardcodat deoarece
- * backend-ul nu expune un endpoint pentru date de consum.
+ * Nu afiseaza date de consum energetic — backend-ul nu are inca un calcul real al
+ * acestora (kW hardcodat), asa ca nu sunt expuse in UI pentru a nu induce in eroare.
  *
  * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
  * Autor: Denis Andrei C.
@@ -52,10 +52,13 @@ data class Schedule(
  *
  * @param application contextul aplicatiei
  * @param deviceId ID-ul dispozitivului releu asociat lampii
+ * @param initialStatus last_status-ul dispozitivului la momentul navigarii (de pe lista de
+ *   dispozitive), folosit pentru afisarea imediata a starii corecte inainte de reincarcare
  */
 class LampControlViewModel(
     application: Application,
-    private val deviceId: Int
+    private val deviceId: Int,
+    initialStatus: String? = null
 ) : AndroidViewModel(application) {
 
     private val repository = DeviceRepository(RetrofitClient.apiService)
@@ -63,24 +66,11 @@ class LampControlViewModel(
     private val _device = MutableStateFlow<DeviceResponse?>(null)
     val device: StateFlow<DeviceResponse?> = _device.asStateFlow()
 
-    // Starea de pornit/oprit, sincronizata cu is_active din API la incarcare
-    private val _isOn = MutableStateFlow(false)
+    // Starea de pornit/oprit, sincronizata cu last_status din API la incarcare.
+    // Initializata din initialStatus (transmis de la ecranul de lista) pentru a evita
+    // un flash vizual de "OFF" cat timp loadDevice() reincarca datele din retea.
+    private val _isOn = MutableStateFlow(initialStatus?.lowercase() == "on")
     val isOn: StateFlow<Boolean> = _isOn.asStateFlow()
-
-    /**
-     * Puterea electrica consumata de lampa in Wati.
-     *
-     * Valoare hardcodata — backend-ul nu expune date de consum energetic.
-     * In versiunile viitoare, aceasta ar putea veni din senzori de putere.
-     */
-    val powerWatts: Double = 12.5
-
-    /**
-     * Orele de utilizare zilnica estimata.
-     *
-     * Valoare hardcodata — nu exista endpoint pentru statistici de utilizare.
-     */
-    val usageHours: Double = 4.2
 
     /**
      * Lista de programari initializata cu doua intrari implicite.
@@ -113,9 +103,13 @@ class LampControlViewModel(
             _isLoading.value = true
             repository.getDevices()
                 .onSuccess { devices ->
-                    _device.value = devices.find { it.id == deviceId }
-                    // Sincronizam starea locala cu starea reala a dispozitivului
-                    _isOn.value = _device.value?.is_online ?: false
+                    val d = devices.find { it.id == deviceId }
+                    _device.value = d
+                    // Sincronizam starea locala cu last_status (aceeasi conventie ca in
+                    // HomeViewModel): "on" explicit, sau online fara status raportat inca
+                    _isOn.value = d?.let {
+                        it.last_status?.lowercase() == "on" || (it.last_status == null && it.is_online)
+                    } ?: false
                 }
                 .onFailure { _error.value = it.message }
             _isLoading.value = false
@@ -182,13 +176,16 @@ class LampControlViewModel(
     }
 
     /**
-     * Factory pentru injectarea [deviceId] fara framework DI.
+     * Factory pentru injectarea [deviceId] si [initialStatus] fara framework DI.
      */
-    class Factory(private val application: Application, private val deviceId: Int) :
-        ViewModelProvider.Factory {
+    class Factory(
+        private val application: Application,
+        private val deviceId: Int,
+        private val initialStatus: String? = null
+    ) : ViewModelProvider.Factory {
         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
             @Suppress("UNCHECKED_CAST")
-            return LampControlViewModel(application, deviceId) as T
+            return LampControlViewModel(application, deviceId, initialStatus) as T
         }
     }
 }

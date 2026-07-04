@@ -60,7 +60,7 @@ fun SettingsScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri -> uri?.let { viewModel.uploadAvatar(it) } }
 
-    val baseUrl = "http://10.0.2.2:8000"
+    val baseUrl = RetrofitClient.rootUrl
 
     val snackbarHostState = remember { SnackbarHostState() }
 

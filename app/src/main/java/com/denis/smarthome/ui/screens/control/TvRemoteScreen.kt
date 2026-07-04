@@ -17,7 +17,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -224,25 +223,6 @@ fun TvRemoteScreen(
                         size = 64.dp,
                         cornerRadius = 16.dp
                     )
-                }
-
-                // ── Learn New Button ──────────────────────────────────────────
-                // Buton pentru invatarea de noi comenzi IR (functionalitate viitoare)
-                HorizontalDivider(color = Outline, modifier = Modifier.padding(vertical = 4.dp))
-                Button(
-                    onClick = { },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariant)
-                ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = null,
-                        tint = Primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Learn New Command", color = Primary, fontWeight = FontWeight.SemiBold)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))

@@ -14,7 +14,12 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.denis.smarthome.data.api.RetrofitClient
+import com.denis.smarthome.data.model.DeviceResponse
+import com.denis.smarthome.data.model.RoutineCreate
+import com.denis.smarthome.data.model.RoutineResponse
 import com.denis.smarthome.data.model.SceneResponse
+import com.denis.smarthome.data.repository.DeviceRepository
+import com.denis.smarthome.data.repository.RoutineRepository
 import com.denis.smarthome.data.repository.SceneRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +36,8 @@ import kotlinx.coroutines.launch
 class ScenesViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = SceneRepository(RetrofitClient.apiService)
+    private val routineRepository = RoutineRepository(RetrofitClient.apiService)
+    private val deviceRepository = DeviceRepository(RetrofitClient.apiService)
 
     private val _scenes = MutableStateFlow<List<SceneResponse>>(emptyList())
     val scenes: StateFlow<List<SceneResponse>> = _scenes.asStateFlow()
@@ -40,6 +47,22 @@ class ScenesViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+
+    // Rutine automate (manuale + sugerate de ML), separate de scenele executate manual
+    private val _routines = MutableStateFlow<List<RoutineResponse>>(emptyList())
+    val routines: StateFlow<List<RoutineResponse>> = _routines.asStateFlow()
+
+    // Dispozitivele utilizatorului, folosite pentru afisarea numelui in cardul rutinei
+    // si pentru selectorul de dispozitiv din dialogul de creare manuala
+    private val _devices = MutableStateFlow<List<DeviceResponse>>(emptyList())
+    val devices: StateFlow<List<DeviceResponse>> = _devices.asStateFlow()
+
+    private val _isLoadingRoutines = MutableStateFlow(false)
+    val isLoadingRoutines: StateFlow<Boolean> = _isLoadingRoutines.asStateFlow()
+
+    // Mesaj afisat dupa rularea detectiei ML (ex: "2 rutine noi detectate")
+    private val _mlMessage = MutableStateFlow<String?>(null)
+    val mlMessage: StateFlow<String?> = _mlMessage.asStateFlow()
 
     /**
      * ID-ul scenei care se executa in momentul curent.
@@ -51,7 +74,7 @@ class ScenesViewModel(application: Application) : AndroidViewModel(application) 
     private val _executingSceneId = MutableStateFlow<Int?>(null)
     val executingSceneId: StateFlow<Int?> = _executingSceneId.asStateFlow()
 
-    init { loadScenes() }
+    init { loadScenes(); loadRoutines(); loadDevices() }
 
     /**
      * Incarca lista completa de scene disponibile din API.
@@ -104,4 +127,87 @@ class ScenesViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Sterge mesajul de eroare curent. */
     fun clearError() { _error.value = null }
+
+    /** Incarca lista de rutine (manuale + sugerate de ML) a utilizatorului curent. */
+    fun loadRoutines() {
+        viewModelScope.launch {
+            _isLoadingRoutines.value = true
+            routineRepository.getRoutines()
+                .onSuccess { _routines.value = it }
+                .onFailure { _error.value = it.message }
+            _isLoadingRoutines.value = false
+        }
+    }
+
+    /** Incarca lista de dispozitive, folosita pentru afisare si pentru crearea manuala de rutine. */
+    private fun loadDevices() {
+        viewModelScope.launch {
+            deviceRepository.getDevices().onSuccess { _devices.value = it }
+        }
+    }
+
+    /**
+     * Activeaza/dezactiveaza o rutina. Rutinele ML sunt salvate inactive implicit,
+     * deci utilizatorul trebuie sa le activeze manual din UI pentru ca schedulerul
+     * de pe backend sa inceapa sa le execute.
+     */
+    fun toggleRoutine(id: Int, isActive: Boolean) {
+        viewModelScope.launch {
+            routineRepository.toggleRoutine(id, isActive)
+                .onSuccess { updated ->
+                    _routines.value = _routines.value.map { if (it.id == updated.id) updated else it }
+                }
+                .onFailure { _error.value = it.message }
+        }
+    }
+
+    /** Sterge o rutina si reincarca lista. */
+    fun deleteRoutine(id: Int) {
+        viewModelScope.launch {
+            routineRepository.deleteRoutine(id)
+                .onSuccess { loadRoutines() }
+                .onFailure { _error.value = it.message }
+        }
+    }
+
+    /** Creeaza o rutina manuala noua si reincarca lista dupa succes. */
+    fun createRoutine(name: String, deviceId: Int, action: String, value: String?, triggerTime: String, daysOfWeek: String) {
+        viewModelScope.launch {
+            routineRepository.createRoutine(
+                RoutineCreate(
+                    name = name,
+                    device_id = deviceId,
+                    action = action,
+                    value = value,
+                    trigger_time = triggerTime,
+                    days_of_week = daysOfWeek
+                )
+            ).onSuccess { loadRoutines() }
+                .onFailure { _error.value = it.message }
+        }
+    }
+
+    /**
+     * Ruleaza detectia ML (DBSCAN) pe istoricul de comenzi al utilizatorului.
+     * Tiparele noi detectate sunt salvate pe backend ca rutine inactive (is_active=false);
+     * utilizatorul le poate revizui si activa din lista de rutine.
+     */
+    fun generateMlRoutines() {
+        viewModelScope.launch {
+            _isLoadingRoutines.value = true
+            routineRepository.detectRoutines()
+                .onSuccess { result ->
+                    _mlMessage.value = if (result.routines_saved > 0)
+                        "${result.routines_saved} new routine(s) detected"
+                    else
+                        "No new routines detected"
+                    loadRoutines()
+                }
+                .onFailure { _error.value = it.message }
+            _isLoadingRoutines.value = false
+        }
+    }
+
+    /** Sterge mesajul de detectie ML curent. */
+    fun clearMlMessage() { _mlMessage.value = null }
 }

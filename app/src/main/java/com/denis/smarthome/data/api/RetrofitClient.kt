@@ -44,6 +44,14 @@ object RetrofitClient {
     var BASE_URL = DEVICE_URL
         private set
 
+    /**
+     * Radacina serverului (fara sufixul "api/"), folosita pentru a construi URL-uri
+     * complete catre resurse statice servite direct de FastAPI (ex: avatare de profil
+     * din /static/avatars/...), care nu sunt sub prefixul /api/.
+     */
+    val rootUrl: String
+        get() = BASE_URL.removeSuffix("api/").trimEnd('/')
+
     private var tokenManager: TokenManager? = null
     private var _apiService: ApiService? = null
 

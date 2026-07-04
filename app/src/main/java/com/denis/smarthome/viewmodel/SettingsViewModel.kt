@@ -290,7 +290,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 val bytes = cr.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching
                 val requestBody = bytes.toRequestBody(mimeType.toMediaType())
                 val extension = if (mimeType.contains("png")) "png" else "jpg"
-                val part = MultipartBody.Part.createFormData("avatar", "avatar.$extension", requestBody)
+                // Numele campului trebuie sa fie "file" — asa e definit parametrul
+                // in FastAPI (async def upload_avatar(file: UploadFile = File(...))).
+                val part = MultipartBody.Part.createFormData("file", "avatar.$extension", requestBody)
                 authRepo.uploadAvatar(part)
                     .onSuccess { user ->
                         _avatarUrl.value = user.avatar_url?.takeIf { it.isNotBlank() }

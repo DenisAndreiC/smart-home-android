@@ -124,9 +124,6 @@ fun DevicesListScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { }) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = OnSurface)
-                    }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Devices",

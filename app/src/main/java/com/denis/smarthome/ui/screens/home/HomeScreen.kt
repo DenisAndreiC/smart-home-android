@@ -68,7 +68,6 @@ fun HomeScreen(
     val user by viewModel.user.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val unreadCount by viewModel.unreadNotificationCount.collectAsState()
-    val energyKwh by viewModel.energyKwh.collectAsState()
     val scenes by viewModel.scenes.collectAsState()
     val executingSceneId by viewModel.executingSceneId.collectAsState()
     val recommendations by viewModel.recommendations.collectAsState()
@@ -195,6 +194,8 @@ fun HomeScreen(
                     }
 
                     // ── Statistics ──
+                    // Toate valorile vin din GET /api/dashboard/stats (date reale calculate
+                    // de backend), nu mai sunt numere inventate client-side.
                     item {
                         Spacer(modifier = Modifier.height(16.dp))
                         SectionTitle(title = "Statistics")
@@ -211,21 +212,51 @@ fun HomeScreen(
                                 )
                             }
                             item {
-                                val kwh = if (energyKwh > 0) String.format("%.1f", energyKwh) else "0.0"
                                 StatCard(
-                                    icon = Icons.Default.Bolt,
-                                    label = "Consumption",
-                                    value = "$kwh kWh",
-                                    change = "est. today"
+                                    icon = Icons.Default.AutoAwesome,
+                                    label = "Commands",
+                                    value = "${stats?.total_commands_today ?: 0}",
+                                    change = "today"
                                 )
                             }
                             item {
                                 StatCard(
-                                    icon = Icons.Default.AutoAwesome,
-                                    label = "Automations",
-                                    value = "${stats?.total_commands_today ?: 0}",
-                                    change = "today"
+                                    icon = Icons.Default.Schedule,
+                                    label = "Routines",
+                                    value = "${stats?.total_routines_active ?: 0}",
+                                    change = "active"
                                 )
+                            }
+                        }
+
+                        // Cel mai folosit dispozitiv si ora de varf — afisate doar cand
+                        // backend-ul are suficiente date pentru a le calcula
+                        val mostUsed = stats?.most_used_device
+                        val peakHour = stats?.peak_hour
+                        if (mostUsed != null || peakHour != null) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                if (mostUsed != null) {
+                                    InfoPill(
+                                        icon = Icons.Default.Star,
+                                        label = "Most used",
+                                        value = mostUsed,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                if (peakHour != null) {
+                                    InfoPill(
+                                        icon = Icons.Default.AccessTime,
+                                        label = "Peak hour",
+                                        value = "${peakHour.toString().padStart(2, '0')}:00",
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                         }
                     }
@@ -427,6 +458,33 @@ fun HomeScreen(
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add device")
             }
+        }
+    }
+}
+
+/**
+ * Card mic pentru afisarea unui fapt real din DashboardStats (ex: cel mai folosit
+ * dispozitiv, ora de varf), sub forma de "pill" cu iconita si eticheta.
+ */
+@Composable
+private fun InfoPill(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Surface)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
+            Text(label, color = OnSurface, style = MaterialTheme.typography.labelSmall)
+            Text(value, color = OnBackground, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
     }
 }

@@ -38,7 +38,6 @@ import androidx.navigation.NavController
 import com.denis.smarthome.data.model.DeviceResponse
 import com.denis.smarthome.ui.components.LargeToggleSwitch
 import com.denis.smarthome.ui.components.ScheduleItem
-import com.denis.smarthome.ui.components.StatCard
 import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.LampControlViewModel
 import com.denis.smarthome.viewmodel.Schedule
@@ -60,7 +59,7 @@ fun LampControlScreen(
 ) {
     val app = LocalContext.current.applicationContext as Application
     val viewModel: LampControlViewModel = viewModel(
-        factory = LampControlViewModel.Factory(app, deviceId)
+        factory = LampControlViewModel.Factory(app, deviceId, device.last_status)
     )
     val isOn       by viewModel.isOn.collectAsState()
     val schedules  by viewModel.schedules.collectAsState()
@@ -209,29 +208,6 @@ fun LampControlScreen(
                     checked = isOn,
                     onCheckedChange = { viewModel.togglePower() }
                 )
-
-                // ── Stats Row ─────────────────────────────────────────────────
-                // Doua carduri de statistici (StatCard refolosit din componente comune):
-                // puterea consumata in W si orele de utilizare astazi
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    StatCard(
-                        icon = Icons.Default.Bolt,
-                        label = "POWER",
-                        value = "${viewModel.powerWatts} W",
-                        change = "Active",
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatCard(
-                        icon = Icons.Default.Schedule,
-                        label = "USAGE TODAY",
-                        value = "${viewModel.usageHours} h",
-                        change = "Today",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
 
                 // ── Schedules ─────────────────────────────────────────────────
                 // Lista de programari salvate local in ViewModel.
