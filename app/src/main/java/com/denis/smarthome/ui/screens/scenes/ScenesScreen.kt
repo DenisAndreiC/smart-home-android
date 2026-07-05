@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -42,6 +43,7 @@ import androidx.navigation.NavController
 import com.denis.smarthome.data.model.DeviceResponse
 import com.denis.smarthome.data.model.RoutineCandidate
 import com.denis.smarthome.data.model.RoutineResponse
+import com.denis.smarthome.data.model.SceneAction
 import com.denis.smarthome.data.model.SceneResponse
 import com.denis.smarthome.ui.navigation.NavRoutes
 import com.denis.smarthome.ui.theme.*
@@ -98,15 +100,13 @@ private fun formatDaysOfWeek(daysOfWeek: String): String {
 }
 
 /**
- * Ecranul principal al sectiunii Scene & Rutine.
- * Foloseste un TabRow pentru a separa clar cele doua concepte:
- * - tab 0: Scene (grila existenta, executie manuala)
- * - tab 1: Rutine (lista de automatizari cu toggle activ/inactiv)
+ * Ecranul principal al sectiunii Scene & Rutine — wrapper subtire peste ViewModel.
+ * Citeste starea din [ScenesViewModel] si o paseaza catre [ScenesScreenContent], care
+ * contine tot UI-ul si nu depinde de ViewModel (poate fi randat direct in @Preview).
  *
  * @param navController controllerul de navigare Compose
  * @param viewModel ScenesViewModel furnizat prin injectare Compose
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScenesScreen(
     navController: NavController,
@@ -123,6 +123,69 @@ fun ScenesScreen(
     val mlCandidates        by viewModel.mlCandidates.collectAsState()
     val showMlCandidatesDialog by viewModel.showMlCandidatesDialog.collectAsState()
 
+    ScenesScreenContent(
+        scenes = scenes,
+        isLoadingScenes = isLoading,
+        executingSceneId = executingId,
+        routines = routines,
+        devices = devices,
+        isLoadingRoutines = isLoadingRoutines,
+        mlMessage = mlMessage,
+        mlCandidates = mlCandidates,
+        showMlCandidatesDialog = showMlCandidatesDialog,
+        onRefreshScenes = { viewModel.loadScenes() },
+        onRefreshRoutines = { viewModel.loadRoutines() },
+        onExecuteScene = { viewModel.executeScene(it) },
+        onDeleteScene = { viewModel.deleteScene(it) },
+        onEditScene = { navController.navigate(NavRoutes.SceneEditor.createRoute(it)) },
+        onCreateScene = { navController.navigate(NavRoutes.SceneEditor.createRoute()) },
+        onToggleRoutine = { id, active -> viewModel.toggleRoutine(id, active) },
+        onDeleteRoutine = { viewModel.deleteRoutine(it) },
+        onGenerateMlRoutines = { viewModel.generateMlRoutines() },
+        onCreateRoutine = { name, deviceId, action, value, triggerTime, daysOfWeek ->
+            viewModel.createRoutine(name, deviceId, action, value, triggerTime, daysOfWeek)
+        },
+        onConfirmMlCandidates = { viewModel.createSelectedRoutineCandidates(it) },
+        onDismissMlCandidatesDialog = { viewModel.dismissMlCandidatesDialog() },
+        onClearMlMessage = { viewModel.clearMlMessage() }
+    )
+}
+
+/**
+ * UI-ul ecranului Scene & Rutine, fara dependinta de ViewModel.
+ * Primeste toata starea ca parametri simpli, ceea ce permite randare in @Preview
+ * fara apeluri de retea.
+ *
+ * Foloseste un TabRow pentru a separa clar cele doua concepte:
+ * - tab 0: Scene (grila existenta, executie manuala)
+ * - tab 1: Rutine (lista de automatizari cu toggle activ/inactiv)
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ScenesScreenContent(
+    scenes: List<SceneResponse>,
+    isLoadingScenes: Boolean,
+    executingSceneId: Int?,
+    routines: List<RoutineResponse>,
+    devices: List<DeviceResponse>,
+    isLoadingRoutines: Boolean,
+    mlMessage: String?,
+    mlCandidates: List<RoutineCandidate>,
+    showMlCandidatesDialog: Boolean,
+    onRefreshScenes: () -> Unit,
+    onRefreshRoutines: () -> Unit,
+    onExecuteScene: (Int) -> Unit,
+    onDeleteScene: (Int) -> Unit,
+    onEditScene: (Int) -> Unit,
+    onCreateScene: () -> Unit,
+    onToggleRoutine: (Int, Boolean) -> Unit,
+    onDeleteRoutine: (Int) -> Unit,
+    onGenerateMlRoutines: () -> Unit,
+    onCreateRoutine: (name: String, deviceId: Int, action: String, value: String?, triggerTime: String, daysOfWeek: String) -> Unit,
+    onConfirmMlCandidates: (List<RoutineCandidate>) -> Unit,
+    onDismissMlCandidatesDialog: () -> Unit,
+    onClearMlMessage: () -> Unit
+) {
     var selectedTab by remember { mutableStateOf(0) }
 
     // sceneToDelete retine scena selectata pentru confirmare inainte de stergere
@@ -132,7 +195,7 @@ fun ScenesScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(mlMessage) {
-        mlMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearMlMessage() }
+        mlMessage?.let { snackbarHostState.showSnackbar(it); onClearMlMessage() }
     }
 
     // Dialog de confirmare stergere scena — apare doar cand sceneToDelete != null
@@ -143,7 +206,7 @@ fun ScenesScreen(
             title = { Text("Delete Scene", color = OnBackground, fontWeight = FontWeight.Bold) },
             text  = { Text("Delete \"${scene.name}\"? This cannot be undone.", color = OnSurface) },
             confirmButton = {
-                TextButton(onClick = { viewModel.deleteScene(scene.id); sceneToDelete = null }) {
+                TextButton(onClick = { onDeleteScene(scene.id); sceneToDelete = null }) {
                     Text("Delete", color = ErrorColor, fontWeight = FontWeight.Bold)
                 }
             },
@@ -161,7 +224,7 @@ fun ScenesScreen(
             title = { Text("Delete Routine", color = OnBackground, fontWeight = FontWeight.Bold) },
             text  = { Text("Delete \"${routine.name}\"? This cannot be undone.", color = OnSurface) },
             confirmButton = {
-                TextButton(onClick = { viewModel.deleteRoutine(routine.id); routineToDelete = null }) {
+                TextButton(onClick = { onDeleteRoutine(routine.id); routineToDelete = null }) {
                     Text("Delete", color = ErrorColor, fontWeight = FontWeight.Bold)
                 }
             },
@@ -175,7 +238,7 @@ fun ScenesScreen(
         CreateRoutineDialog(
             devices = devices,
             onConfirm = { name, deviceId, action, value, triggerTime, daysOfWeek ->
-                viewModel.createRoutine(name, deviceId, action, value, triggerTime, daysOfWeek)
+                onCreateRoutine(name, deviceId, action, value, triggerTime, daysOfWeek)
                 showCreateRoutineDialog = false
             },
             onDismiss = { showCreateRoutineDialog = false }
@@ -187,8 +250,8 @@ fun ScenesScreen(
     if (showMlCandidatesDialog) {
         RoutineCandidatesDialog(
             candidates = mlCandidates,
-            onConfirm = { selected -> viewModel.createSelectedRoutineCandidates(selected) },
-            onDismiss = { viewModel.dismissMlCandidatesDialog() }
+            onConfirm = { selected -> onConfirmMlCandidates(selected) },
+            onDismiss = onDismissMlCandidatesDialog
         )
     }
 
@@ -199,7 +262,7 @@ fun ScenesScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
-                    if (selectedTab == 0) navController.navigate(NavRoutes.SceneEditor.createRoute())
+                    if (selectedTab == 0) onCreateScene()
                     else showCreateRoutineDialog = true
                 },
                 containerColor = Primary,
@@ -238,7 +301,7 @@ fun ScenesScreen(
                     )
                 }
                 IconButton(
-                    onClick = { if (selectedTab == 0) viewModel.loadScenes() else viewModel.loadRoutines() },
+                    onClick = { if (selectedTab == 0) onRefreshScenes() else onRefreshRoutines() },
                     modifier = Modifier.align(Alignment.CenterEnd)
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Primary)
@@ -270,20 +333,20 @@ fun ScenesScreen(
             when (selectedTab) {
                 0 -> ScenesTab(
                     scenes = scenes,
-                    isLoading = isLoading,
-                    executingId = executingId,
-                    onExecute = { viewModel.executeScene(it) },
+                    isLoading = isLoadingScenes,
+                    executingId = executingSceneId,
+                    onExecute = onExecuteScene,
                     onDelete = { sceneToDelete = it },
-                    onEdit = { navController.navigate(NavRoutes.SceneEditor.createRoute(it)) },
-                    onCreate = { navController.navigate(NavRoutes.SceneEditor.createRoute()) }
+                    onEdit = onEditScene,
+                    onCreate = onCreateScene
                 )
                 1 -> RoutinesTab(
                     routines = routines,
                     devices = devices,
                     isLoading = isLoadingRoutines,
-                    onToggle = { id, active -> viewModel.toggleRoutine(id, active) },
+                    onToggle = onToggleRoutine,
                     onDelete = { routineToDelete = it },
-                    onGenerateMl = { viewModel.generateMlRoutines() },
+                    onGenerateMl = onGenerateMlRoutines,
                     onCreateManual = { showCreateRoutineDialog = true }
                 )
             }
@@ -712,9 +775,12 @@ private fun RoutineCandidatesDialog(
     onConfirm: (List<RoutineCandidate>) -> Unit,
     onDismiss: () -> Unit
 ) {
+    // Cheia e pozitia in lista, nu candidate.candidate_index: acel camp e nullable si
+    // absent din /ml/recommendations (vezi Models.kt), deci nu e sigur de folosit ca
+    // identificator unic daca acest dialog ar primi vreodata date din acel endpoint.
     val selected = remember(candidates) {
         mutableStateMapOf<Int, Boolean>().apply {
-            candidates.forEach { put(it.candidate_index, true) }
+            candidates.indices.forEach { put(it, true) }
         }
     }
 
@@ -738,19 +804,19 @@ private fun RoutineCandidatesDialog(
                     fontSize = 12.sp
                 )
                 Spacer(Modifier.height(8.dp))
-                candidates.forEach { candidate ->
-                    val isChecked = selected[candidate.candidate_index] ?: false
+                candidates.forEachIndexed { index, candidate ->
+                    val isChecked = selected[index] ?: false
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .clickable { selected[candidate.candidate_index] = !isChecked }
+                            .clickable { selected[index] = !isChecked }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(
                             checked = isChecked,
-                            onCheckedChange = { selected[candidate.candidate_index] = it },
+                            onCheckedChange = { selected[index] = it },
                             colors = CheckboxDefaults.colors(checkedColor = Primary, uncheckedColor = Outline)
                         )
                         Column(modifier = Modifier.weight(1f)) {
@@ -768,7 +834,7 @@ private fun RoutineCandidatesDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onConfirm(candidates.filter { selected[it.candidate_index] == true })
+                    onConfirm(candidates.filterIndexed { index, _ -> selected[index] == true })
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Primary),
                 shape = RoundedCornerShape(12.dp)
@@ -893,5 +959,173 @@ private fun SceneCard(
                 }
             }
         }
+    }
+}
+
+// ── Preview fake data ────────────────────────────────────────────────────────
+
+private val previewScenesDevices = listOf(
+    DeviceResponse(
+        id = 1, name = "Living Room Lamp", device_type = "smart_plug", room = "Living Room",
+        room_id = 1, mqtt_topic = null, is_online = true, last_status = "on", mac_address = null,
+        ir_codes = null, ir_remote_type = null, owner_id = 1, created_at = "2026-01-01T00:00:00"
+    ),
+    DeviceResponse(
+        id = 2, name = "Bedroom AC", device_type = "ir_ac", room = "Bedroom",
+        room_id = 2, mqtt_topic = null, is_online = true, last_status = "off", mac_address = null,
+        ir_codes = null, ir_remote_type = "44-key", owner_id = 1, created_at = "2026-01-01T00:00:00"
+    )
+)
+
+private val previewScenes = listOf(
+    SceneResponse(
+        id = 1,
+        name = "Good Morning",
+        icon = null,
+        actions = listOf(
+            SceneAction(device_id = 1, command_type = "power", command_data = "on", delay_seconds = 0),
+            SceneAction(device_id = 2, command_type = "power", command_data = "off", delay_seconds = 5)
+        ),
+        is_active = true
+    ),
+    SceneResponse(
+        id = 2,
+        name = "Movie Night",
+        icon = null,
+        actions = listOf(
+            SceneAction(device_id = 1, command_type = "power", command_data = "off", delay_seconds = 0)
+        ),
+        is_active = true
+    ),
+    SceneResponse(
+        id = 3,
+        name = "Away Mode",
+        icon = null,
+        actions = listOf(
+            SceneAction(device_id = 1, command_type = "power", command_data = "off", delay_seconds = 0),
+            SceneAction(device_id = 2, command_type = "power", command_data = "off", delay_seconds = 0)
+        ),
+        is_active = true
+    )
+)
+
+private val previewRoutines = listOf(
+    RoutineResponse(
+        id = 1,
+        user_id = 1,
+        name = "Turn on lamp at sunset",
+        device_id = 1,
+        action = "power",
+        value = "on",
+        trigger_time = "19:30",
+        days_of_week = "1,2,3,4,5,6,7",
+        is_active = true,
+        is_ml_suggested = false,
+        confidence = null,
+        created_at = "2026-01-01T00:00:00"
+    ),
+    RoutineResponse(
+        id = 2,
+        user_id = 1,
+        name = "Weekday AC off",
+        device_id = 2,
+        action = "power",
+        value = "off",
+        trigger_time = "08:00",
+        days_of_week = "1,2,3,4,5",
+        is_active = false,
+        is_ml_suggested = true,
+        confidence = 0.82f,
+        created_at = "2026-01-01T00:00:00"
+    )
+)
+
+private val previewMlCandidates = listOf(
+    RoutineCandidate(
+        device_id = 1,
+        device_name = "Living Room Lamp",
+        action = "power",
+        value = "on",
+        trigger_time = "07:00",
+        days_of_week = "1,2,3,4,5",
+        occurrences = 12,
+        distinct_days = 5,
+        confidence = 0.91f,
+        name = "Turn on lamp weekday mornings",
+        candidate_index = 0
+    ),
+    RoutineCandidate(
+        device_id = 2,
+        device_name = "Bedroom AC",
+        action = "power",
+        value = "off",
+        trigger_time = "23:00",
+        days_of_week = "1,2,3,4,5,6,7",
+        occurrences = 20,
+        distinct_days = 7,
+        confidence = 0.76f,
+        name = "Turn off AC at night",
+        candidate_index = 1
+    )
+)
+
+@Preview(showBackground = true)
+@Composable
+fun ScenesScreenScenesTabPreview() {
+    SmartHomeTheme {
+        ScenesScreenContent(
+            scenes = previewScenes,
+            isLoadingScenes = false,
+            executingSceneId = null,
+            routines = previewRoutines,
+            devices = previewScenesDevices,
+            isLoadingRoutines = false,
+            mlMessage = null,
+            mlCandidates = emptyList(),
+            showMlCandidatesDialog = false,
+            onRefreshScenes = {},
+            onRefreshRoutines = {},
+            onExecuteScene = {},
+            onDeleteScene = {},
+            onEditScene = {},
+            onCreateScene = {},
+            onToggleRoutine = { _, _ -> },
+            onDeleteRoutine = {},
+            onGenerateMlRoutines = {},
+            onCreateRoutine = { _, _, _, _, _, _ -> },
+            onConfirmMlCandidates = {},
+            onDismissMlCandidatesDialog = {},
+            onClearMlMessage = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun ScenesScreenRoutinesTabPreview() {
+    SmartHomeTheme {
+        // Content porneste implicit pe tab-ul "Scenes"; RoutinesTab e afisat direct
+        // pentru a previzualiza cardurile de rutine fara interactiune manuala cu TabRow.
+        RoutinesTab(
+            routines = previewRoutines,
+            devices = previewScenesDevices,
+            isLoading = false,
+            onToggle = { _, _ -> },
+            onDelete = {},
+            onGenerateMl = {},
+            onCreateManual = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun RoutineCandidatesDialogPreview() {
+    SmartHomeTheme {
+        RoutineCandidatesDialog(
+            candidates = previewMlCandidates,
+            onConfirm = {},
+            onDismiss = {}
+        )
     }
 }

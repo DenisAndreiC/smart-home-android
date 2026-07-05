@@ -1,16 +1,19 @@
 /**
  * RgbBulbViewModel.kt - ViewModel pentru controlul becului RGB cu telecomanda IR
  *
- * Gestioneaza starea becului RGB controlat prin infrarosu: pornit/oprit,
- * luminozitate (step up/down) si culoare discreta (red, green, blue etc.).
+ * Gestioneaza starea becului RGB controlat prin infrarosu: luminozitate (step up/down)
+ * si culoare discreta (red, green, blue etc.). Nu exista buton on/off separat — starea
+ * "isOn" reflecta doar daca becul are alimentare (vezi [loadDevice]).
  *
  * IMPORTANT: Becul RGB este non-smart, controlat prin telecomanda IR (NEC protocol).
  * Nu suporta culori hex arbitrare sau procente de luminozitate.
  * Comenzile disponibile corespund butoanelor fizice de pe telecomanda 44-key / 24-key,
- * dar etichetate in UI dupa efectul real observat (nu dupa eticheta originala):
+ * dar etichetate/remapate in UI dupa efectul real observat, nu dupa eticheta originala
+ * (butoanele fizice on/off si brightness_up sunt inversate fata de eticheta lor):
  * - Culori fixe: red, green, blue
  * - Joc de lumini: warm_white (codul captureaza de fapt o ciclare de culori)
- * - Luminozitate: brightness_up, brightness_down (un pas pe apasare)
+ * - Luminozitate mai tare: codul fizic "power"/"on" (fostul on/off, care chiar creste)
+ * - Luminozitate mai slaba: codul fizic "brightness_up"/"up" (fostul "Brighter", care de fapt scade)
  * - Efect Ice: flash (alb-albastru pulsat)
  *
  * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
@@ -70,8 +73,8 @@ val rgbIrColors = listOf(
  *
  * Spre deosebire de un bec smart (WiFi/Bluetooth), becul IR are control limitat:
  * - Culori: doar cele disponibile pe telecomanda (5-20 culori fixe)
- * - Luminozitate: doar step up / step down (fara slider procentual)
- * - Efecte: flash, fade (disponibile pe 44-key si 24-key)
+ * - Luminozitate: doar step up / step down (fara slider procentual, fara on/off manual)
+ * - Efecte: Ice (disponibil pe 44-key si 24-key)
  *
  * Toate comenzile sunt trimise ca action + value catre backend,
  * care le mapeaza la comanda IR corecta prin MQTT → ESP32 → IR LED → bec.
@@ -89,7 +92,8 @@ class RgbBulbViewModel(
     private val _device = MutableStateFlow<DeviceResponse?>(null)
     val device: StateFlow<DeviceResponse?> = _device.asStateFlow()
 
-    // Starea de pornit/oprit sincronizata cu is_active din API la incarcare
+    // Starea de "are alimentare" a becului — nu exista toggle manual, e derivata din
+    // starea releelor/conectivitatea ESP32 in loadDevice()
     private val _isOn = MutableStateFlow(false)
     val isOn: StateFlow<Boolean> = _isOn.asStateFlow()
 
@@ -132,14 +136,6 @@ class RgbBulbViewModel(
     }
 
     /**
-     * Comuta starea de pornit/oprit a becului si trimite comanda IR power.
-     */
-    fun togglePower() {
-        _isOn.value = !_isOn.value
-        sendCommand("power", if (_isOn.value) "on" else "off")
-    }
-
-    /**
      * Trimite comanda IR pentru o culoare specifica.
      * Actualizeaza starea locala (culoarea selectata si comanda activa).
      *
@@ -152,18 +148,27 @@ class RgbBulbViewModel(
     }
 
     /**
-     * Trimite comanda IR brightness_up — creste luminozitatea cu un pas.
-     * Becul IR nu suporta procente, doar increment/decrement pe butonul fizic.
+     * Creste luminozitatea cu un pas.
+     *
+     * NOTA: butoanele fizice de pe telecomanda nu corespund etichetelor lor — codul
+     * "power"/"on" (fostul buton on/off) este cel care chiar creste luminozitatea,
+     * nu codul "brightness_up" (care de fapt scade). Remapam butonul "Lumina mai tare"
+     * sa trimita codul corect, desi comanda transmisa e in continuare "power"/"on".
      */
     fun brightnessUp() {
-        sendCommand("brightness_up", "up")
+        sendCommand("power", "on")
     }
 
     /**
-     * Trimite comanda IR brightness_down — scade luminozitatea cu un pas.
+     * Scade luminozitatea cu un pas.
+     *
+     * NOTA: codul "brightness_up"/"up" (fostul buton "Brighter") e cel care de fapt
+     * scade luminozitatea, deci butonul "Lumina mai slaba" il foloseste acum.
+     * Vechiul cod "brightness_down"/"down" a ramas orfan (efect neclar/inversat) si
+     * nu mai e trimis din UI.
      */
     fun brightnessDown() {
-        sendCommand("brightness_down", "down")
+        sendCommand("brightness_up", "up")
     }
 
     /**

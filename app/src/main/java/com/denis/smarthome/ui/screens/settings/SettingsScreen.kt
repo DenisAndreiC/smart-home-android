@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -34,6 +35,31 @@ import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import com.denis.smarthome.viewmodel.SettingsViewModel
 
+/**
+ * Stare read-only pentru [SettingsScreenContent] — un pachet simplu de date fara
+ * nicio dependinta de ViewModel, ceea ce permite randarea ecranului in @Preview.
+ */
+data class SettingsUiState(
+    val userName: String,
+    val userEmail: String,
+    val isServerConnected: Boolean,
+    val darkTheme: Boolean,
+    val notifications: Boolean,
+    val lastSyncTime: String,
+    val avatarUrl: String?,
+    val isUploadingAvatar: Boolean,
+    val isVerified: Boolean,
+    val mlMinOccurrences: Int,
+    val mlMinDays: Int,
+    val verificationSent: Boolean,
+    val settingsError: String?
+)
+
+/**
+ * Ecranul de setari — wrapper subtire peste [SettingsViewModel].
+ * Citeste starea din ViewModel si o paseaza catre [SettingsScreenContent], care
+ * contine tot UI-ul si nu depinde de ViewModel (poate fi randat direct in @Preview).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -60,6 +86,71 @@ fun SettingsScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri -> uri?.let { viewModel.uploadAvatar(it) } }
 
+    SettingsScreenContent(
+        state = SettingsUiState(
+            userName = userName,
+            userEmail = userEmail,
+            isServerConnected = isServerConnected,
+            darkTheme = darkTheme,
+            notifications = notifications,
+            lastSyncTime = lastSyncTime,
+            avatarUrl = avatarUrl,
+            isUploadingAvatar = isUploading,
+            isVerified = isVerified,
+            mlMinOccurrences = mlMinOccurrences,
+            mlMinDays = mlMinDays,
+            verificationSent = verificationSent,
+            settingsError = settingsError
+        ),
+        onToggleDarkTheme = { viewModel.toggleDarkTheme() },
+        onToggleNotifications = { viewModel.toggleNotifications() },
+        onUpdateUsername = { viewModel.updateUsername(it) },
+        onResendVerification = { viewModel.resendVerification() },
+        onMinOccurrencesChange = { viewModel.updateMLMinOccurrences(it) },
+        onMinDaysChange = { viewModel.updateMLMinDays(it) },
+        onAvatarClick = { galleryLauncher.launch("image/*") },
+        onChangePasswordClick = { navController.navigate(NavRoutes.ChangePassword.route) },
+        onLogoutConfirm = {
+            viewModel.logout()
+            navController.navigate(NavRoutes.Login.route) {
+                popUpTo(0) { inclusive = true }
+            }
+        },
+        onReportBug = {
+            val intent = Intent(Intent.ACTION_SENDTO).apply {
+                data = Uri.parse("mailto:")
+                putExtra(Intent.EXTRA_EMAIL, arrayOf("cucudenis24@stud.ase.ro"))
+                putExtra(Intent.EXTRA_SUBJECT, "[SmartHome Bug Report]")
+                putExtra(Intent.EXTRA_TEXT,
+                    "Device: ${Build.MODEL}\nAndroid: ${Build.VERSION.RELEASE}\nApp version: 1.0")
+            }
+            context.startActivity(Intent.createChooser(intent, "Send Email"))
+        },
+        onErrorShown = { viewModel.clearSettingsError() }
+    )
+}
+
+/**
+ * UI-ul ecranului de setari, fara dependinta de ViewModel.
+ * Primeste toata starea prin [SettingsUiState] plus callback-uri simple,
+ * ceea ce permite randare in @Preview fara apeluri de retea.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreenContent(
+    state: SettingsUiState,
+    onToggleDarkTheme: () -> Unit,
+    onToggleNotifications: () -> Unit,
+    onUpdateUsername: (String) -> Unit,
+    onResendVerification: () -> Unit,
+    onMinOccurrencesChange: (Int) -> Unit,
+    onMinDaysChange: (Int) -> Unit,
+    onAvatarClick: () -> Unit,
+    onChangePasswordClick: () -> Unit,
+    onLogoutConfirm: () -> Unit,
+    onReportBug: () -> Unit,
+    onErrorShown: () -> Unit
+) {
     val baseUrl = RetrofitClient.rootUrl
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -71,16 +162,16 @@ fun SettingsScreen(
     var newUsernameInput      by remember { mutableStateOf("") }
 
     // Show error snackbar when settingsError is set
-    LaunchedEffect(settingsError) {
-        settingsError?.let {
+    LaunchedEffect(state.settingsError) {
+        state.settingsError?.let {
             snackbarHostState.showSnackbar(it)
-            viewModel.clearSettingsError()
+            onErrorShown()
         }
     }
 
     // Pre-fill display name input when dialog opens
     LaunchedEffect(showEditProfileDialog) {
-        if (showEditProfileDialog) newUsernameInput = userName
+        if (showEditProfileDialog) newUsernameInput = state.userName
     }
 
     // Logout confirmation
@@ -92,11 +183,8 @@ fun SettingsScreen(
             text  = { Text("Are you sure you want to logout?", color = OnSurface) },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.logout()
                     showLogoutDialog = false
-                    navController.navigate(NavRoutes.Login.route) {
-                        popUpTo(0) { inclusive = true }
-                    }
+                    onLogoutConfirm()
                 }) {
                     Text("Logout", color = ErrorColor, fontWeight = FontWeight.Bold)
                 }
@@ -117,7 +205,7 @@ fun SettingsScreen(
             title = { Text("Edit Profile", color = OnBackground, fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(userEmail.ifBlank { "—" }, color = OnSurface, fontSize = 13.sp)
+                    Text(state.userEmail.ifBlank { "—" }, color = OnSurface, fontSize = 13.sp)
                     OutlinedTextField(
                         value = newUsernameInput,
                         onValueChange = { newUsernameInput = it },
@@ -137,7 +225,7 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (newUsernameInput.isNotBlank()) viewModel.updateUsername(newUsernameInput)
+                    if (newUsernameInput.isNotBlank()) onUpdateUsername(newUsernameInput)
                     showEditProfileDialog = false
                 }) { Text("Save", color = Primary, fontWeight = FontWeight.Bold) }
             },
@@ -224,10 +312,10 @@ fun SettingsScreen(
                                 .size(72.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFF1A3A4A))
-                                .clickable { galleryLauncher.launch("image/*") },
+                                .clickable { onAvatarClick() },
                             contentAlignment = Alignment.Center
                         ) {
-                            val fullUrl = avatarUrl?.let { baseUrl + it }
+                            val fullUrl = state.avatarUrl?.let { baseUrl + it }
                             if (fullUrl != null) {
                                 AsyncImage(
                                     model = fullUrl,
@@ -243,7 +331,7 @@ fun SettingsScreen(
                                     tint = Primary
                                 )
                             }
-                            if (isUploading) {
+                            if (state.isUploadingAvatar) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(32.dp),
                                     color = Primary,
@@ -270,13 +358,13 @@ fun SettingsScreen(
                         Spacer(Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = userName.ifBlank { "Your Account" },
+                                text = state.userName.ifBlank { "Your Account" },
                                 color = OnBackground,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = userEmail.ifBlank { "Not loaded" },
+                                text = state.userEmail.ifBlank { "Not loaded" },
                                 color = OnSurface,
                                 fontSize = 14.sp
                             )
@@ -286,7 +374,7 @@ fun SettingsScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                if (isVerified) {
+                                if (state.isVerified) {
                                     Icon(
                                         Icons.Default.CheckCircle,
                                         contentDescription = "Verified",
@@ -303,11 +391,11 @@ fun SettingsScreen(
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        modifier = Modifier.clickable(enabled = !verificationSent) {
-                                            viewModel.resendVerification()
+                                        modifier = Modifier.clickable(enabled = !state.verificationSent) {
+                                            onResendVerification()
                                         }
                                     ) {
-                                        if (verificationSent) {
+                                        if (state.verificationSent) {
                                             Icon(
                                                 Icons.Default.CheckCircle,
                                                 contentDescription = null,
@@ -351,7 +439,7 @@ fun SettingsScreen(
                         }
                         // Navigate to Change Password screen
                         OutlinedButton(
-                            onClick = { navController.navigate(NavRoutes.ChangePassword.route) },
+                            onClick = onChangePasswordClick,
                             shape = RoundedCornerShape(20.dp),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary),
                             border = androidx.compose.foundation.BorderStroke(1.dp, Outline),
@@ -396,11 +484,11 @@ fun SettingsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Box(
                                     modifier = Modifier.size(8.dp).clip(CircleShape)
-                                        .background(if (isServerConnected) Color(0xFF4CAF50) else ErrorColor)
+                                        .background(if (state.isServerConnected) Color(0xFF4CAF50) else ErrorColor)
                                 )
                                 Text(
-                                    if (isServerConnected) "Connected" else "Disconnected",
-                                    color = if (isServerConnected) Color(0xFF4CAF50) else ErrorColor,
+                                    if (state.isServerConnected) "Connected" else "Disconnected",
+                                    color = if (state.isServerConnected) Color(0xFF4CAF50) else ErrorColor,
                                     fontSize = 13.sp
                                 )
                             }
@@ -410,7 +498,7 @@ fun SettingsScreen(
                     SettingsRow(
                         icon = Icons.Default.Sync,
                         label = "Last Sync",
-                        value = lastSyncTime
+                        value = state.lastSyncTime
                     )
                 }
             }
@@ -432,8 +520,8 @@ fun SettingsScreen(
                         label = "Dark Theme",
                         trailingContent = {
                             Switch(
-                                checked = darkTheme,
-                                onCheckedChange = { viewModel.toggleDarkTheme() },
+                                checked = state.darkTheme,
+                                onCheckedChange = { onToggleDarkTheme() },
                                 colors = SwitchDefaults.colors(
                                     checkedTrackColor = Primary, checkedThumbColor = Color.White,
                                     uncheckedTrackColor = SurfaceVariant, uncheckedThumbColor = OnSurface
@@ -447,8 +535,8 @@ fun SettingsScreen(
                         label = "Push Notifications",
                         trailingContent = {
                             Switch(
-                                checked = notifications,
-                                onCheckedChange = { viewModel.toggleNotifications() },
+                                checked = state.notifications,
+                                onCheckedChange = { onToggleNotifications() },
                                 colors = SwitchDefaults.colors(
                                     checkedTrackColor = Primary, checkedThumbColor = Color.White,
                                     uncheckedTrackColor = SurfaceVariant, uncheckedThumbColor = OnSurface
@@ -509,7 +597,7 @@ fun SettingsScreen(
                         }
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            mlMinOccurrences.toString(),
+                            state.mlMinOccurrences.toString(),
                             color = Primary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
@@ -517,9 +605,9 @@ fun SettingsScreen(
                     }
                     Spacer(Modifier.height(8.dp))
                     Slider(
-                        value = mlMinOccurrences.toFloat(),
+                        value = state.mlMinOccurrences.toFloat(),
                         onValueChange = { newVal ->
-                            viewModel.updateMLMinOccurrences(newVal.toInt())
+                            onMinOccurrencesChange(newVal.toInt())
                         },
                         valueRange = 3f..20f,
                         steps = 16,
@@ -576,7 +664,7 @@ fun SettingsScreen(
                         }
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            mlMinDays.toString(),
+                            state.mlMinDays.toString(),
                             color = Primary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
@@ -584,9 +672,9 @@ fun SettingsScreen(
                     }
                     Spacer(Modifier.height(8.dp))
                     Slider(
-                        value = mlMinDays.toFloat(),
+                        value = state.mlMinDays.toFloat(),
                         onValueChange = { newVal ->
-                            viewModel.updateMLMinDays(newVal.toInt())
+                            onMinDaysChange(newVal.toInt())
                         },
                         valueRange = 2f..7f,
                         steps = 4,
@@ -625,16 +713,7 @@ fun SettingsScreen(
                         icon = Icons.Default.BugReport,
                         label = "Report a Bug",
                         showChevron = true,
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                data = Uri.parse("mailto:")
-                                putExtra(Intent.EXTRA_EMAIL, arrayOf("cucudenis24@stud.ase.ro"))
-                                putExtra(Intent.EXTRA_SUBJECT, "[SmartHome Bug Report]")
-                                putExtra(Intent.EXTRA_TEXT,
-                                    "Device: ${Build.MODEL}\nAndroid: ${Build.VERSION.RELEASE}\nApp version: 1.0")
-                            }
-                            context.startActivity(Intent.createChooser(intent, "Send Email"))
-                        }
+                        onClick = onReportBug
                     )
                     HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
                     SettingsRow(icon = Icons.Default.Description,  label = "Terms of Service", showChevron = true, onClick = { showTosDialog = true })
@@ -717,5 +796,67 @@ private fun SettingsRow(
                 Icon(Icons.Default.ChevronRight, contentDescription = null, tint = OnSurface, modifier = Modifier.size(18.dp))
             }
         }
+    }
+}
+
+private val previewSettingsState = SettingsUiState(
+    userName = "Denis Andrei",
+    userEmail = "denis@example.com",
+    isServerConnected = true,
+    darkTheme = true,
+    notifications = true,
+    lastSyncTime = "14:35",
+    avatarUrl = null,
+    isUploadingAvatar = false,
+    isVerified = true,
+    mlMinOccurrences = 5,
+    mlMinDays = 4,
+    verificationSent = false,
+    settingsError = null
+)
+
+@Preview(showBackground = true)
+@Composable
+fun SettingsScreenPreview() {
+    SmartHomeTheme {
+        SettingsScreenContent(
+            state = previewSettingsState,
+            onToggleDarkTheme = {},
+            onToggleNotifications = {},
+            onUpdateUsername = {},
+            onResendVerification = {},
+            onMinOccurrencesChange = {},
+            onMinDaysChange = {},
+            onAvatarClick = {},
+            onChangePasswordClick = {},
+            onLogoutConfirm = {},
+            onReportBug = {},
+            onErrorShown = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun SettingsScreenUnverifiedPreview() {
+    SmartHomeTheme {
+        SettingsScreenContent(
+            state = previewSettingsState.copy(
+                isVerified = false,
+                verificationSent = false,
+                isServerConnected = false
+            ),
+            onToggleDarkTheme = {},
+            onToggleNotifications = {},
+            onUpdateUsername = {},
+            onResendVerification = {},
+            onMinOccurrencesChange = {},
+            onMinDaysChange = {},
+            onAvatarClick = {},
+            onChangePasswordClick = {},
+            onLogoutConfirm = {},
+            onReportBug = {},
+            onErrorShown = {}
+        )
     }
 }

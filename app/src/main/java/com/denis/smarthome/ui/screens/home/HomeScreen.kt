@@ -30,9 +30,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.denis.smarthome.data.model.AnomalyItem
+import com.denis.smarthome.data.model.DashboardStats
+import com.denis.smarthome.data.model.RoutineCandidate
+import com.denis.smarthome.data.model.SceneAction
+import com.denis.smarthome.data.model.SceneResponse
+import com.denis.smarthome.data.model.UserResponse
 import com.denis.smarthome.ui.components.*
 import com.denis.smarthome.ui.navigation.NavRoutes
 import com.denis.smarthome.ui.theme.*
@@ -48,11 +55,9 @@ private val roomGradients = listOf(
 )
 
 /**
- * Ecranul principal cu dashboard-ul SmartHome.
- *
- * Foloseste [PullToRefreshBox] pentru tragere in jos (refresh). Continutul este un
- * [LazyColumn] cu: header salut, statistici reale din API, actiuni rapide cu efecte
- * (allOff/awayMode) si grid 2x2 camere derivate din dispozitive.
+ * Ecranul principal cu dashboard-ul SmartHome — wrapper subtire peste ViewModel.
+ * Citeste starea din [HomeViewModel] si o paseaza catre [HomeScreenContent], care
+ * contine tot UI-ul si nu depinde de ViewModel (poate fi randat direct in @Preview).
  *
  * @param navController controlerul de navigare Compose
  * @param viewModel ViewModel-ul care furnizeaza datele dashboard-ului
@@ -76,6 +81,77 @@ fun HomeScreen(
     val currentDate = viewModel.currentDate
     val userName = user?.username?.split(" ")?.firstOrNull() ?: ""
 
+    HomeScreenContent(
+        greeting = greeting,
+        currentDate = currentDate,
+        userName = userName,
+        unreadCount = unreadCount,
+        stats = stats,
+        scenes = scenes,
+        executingSceneId = executingSceneId,
+        anomalies = anomalies,
+        recommendations = recommendations,
+        rooms = rooms,
+        isLoading = isLoading,
+        onRefresh = { viewModel.loadDashboard() },
+        onNotificationsClick = { navController.navigate(NavRoutes.Notifications.route) },
+        onAllOff = { viewModel.allOff() },
+        onExecuteScene = { viewModel.executeQuickScene(it) },
+        onCreateRoutine = { viewModel.createRoutineFromRecommendation(it) },
+        onDismissRecommendation = { viewModel.dismissRecommendation(it) },
+        onDevicesClick = { navController.navigate(NavRoutes.Devices.route) }
+    )
+}
+
+/**
+ * UI-ul dashboard-ului SmartHome, fara dependinta de ViewModel.
+ * Primeste toata starea ca parametri simpli, ceea ce permite randare in @Preview
+ * fara apeluri de retea.
+ *
+ * Foloseste [PullToRefreshBox] pentru tragere in jos (refresh). Continutul este un
+ * [LazyColumn] cu: header salut, statistici reale din API, actiuni rapide (allOff +
+ * scene), banner anomalii, rutine sugerate si grid 2x2 camere derivate din dispozitive.
+ *
+ * @param greeting salutul dinamic (Good morning/afternoon/evening)
+ * @param currentDate data curenta formatata
+ * @param userName prenumele userului (poate fi gol)
+ * @param unreadCount numarul de notificari necitite (afisat ca badge pe clopotel)
+ * @param stats statisticile dashboard-ului (poate fi null cat timp se incarca)
+ * @param scenes scenele userului, afisate ca Quick Action chips
+ * @param executingSceneId ID-ul scenei in curs de executie (pentru loading state pe chip)
+ * @param anomalies lista de anomalii ML (se afiseaza doar prima, daca exista)
+ * @param recommendations lista de rutine sugerate de ML
+ * @param rooms lista camerelor derivate din dispozitive
+ * @param isLoading true cat timp se incarca/reincarca dashboard-ul
+ * @param onRefresh callback pentru pull-to-refresh
+ * @param onNotificationsClick callback la click pe clopotel
+ * @param onAllOff callback pentru chip-ul "All Off"
+ * @param onExecuteScene callback pentru executarea unei scene (Quick Action chip)
+ * @param onCreateRoutine callback pentru crearea unei rutine dintr-o recomandare
+ * @param onDismissRecommendation callback pentru respingerea unei recomandari
+ * @param onDevicesClick callback pentru navigare catre ecranul de dispozitive
+ */
+@Composable
+fun HomeScreenContent(
+    greeting: String,
+    currentDate: String,
+    userName: String,
+    unreadCount: Int,
+    stats: DashboardStats?,
+    scenes: List<SceneResponse>,
+    executingSceneId: Int?,
+    anomalies: List<AnomalyItem>,
+    recommendations: List<RoutineCandidate>,
+    rooms: List<RoomInfo>,
+    isLoading: Boolean,
+    onRefresh: () -> Unit,
+    onNotificationsClick: () -> Unit,
+    onAllOff: () -> Unit,
+    onExecuteScene: (Int) -> Unit,
+    onCreateRoutine: (RoutineCandidate) -> Unit,
+    onDismissRecommendation: (RoutineCandidate) -> Unit,
+    onDevicesClick: () -> Unit
+) {
     var activeChipIndex by remember { mutableStateOf(-1) }
     var showAddRoomDialog by remember { mutableStateOf(false) }
 
@@ -94,7 +170,7 @@ fun HomeScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showAddRoomDialog = false
-                    navController.navigate(NavRoutes.Devices.route)
+                    onDevicesClick()
                 }) { Text("Go to Devices", color = Primary) }
             },
             dismissButton = {
@@ -117,7 +193,7 @@ fun HomeScreen(
         ) {
             PullToRefreshBox(
                 isRefreshing = isLoading,
-                onRefresh = { viewModel.loadDashboard() },
+                onRefresh = onRefresh,
                 modifier = Modifier.fillMaxSize()
             ) {
                 LazyColumn(
@@ -169,9 +245,7 @@ fun HomeScreen(
                             // Clopotel cu badge: navigheaza la NotificationsScreen
                             // Badge-ul rosu apare doar cand unreadCount > 0
                             Box {
-                                IconButton(onClick = {
-                                    navController.navigate(NavRoutes.Notifications.route)
-                                }) {
+                                IconButton(onClick = onNotificationsClick) {
                                     Icon(
                                         imageVector = Icons.Outlined.Notifications,
                                         contentDescription = "Notifications",
@@ -279,7 +353,7 @@ fun HomeScreen(
                                     isActive = activeChipIndex == 0,
                                     onClick = {
                                         activeChipIndex = if (activeChipIndex == 0) -1 else 0
-                                        viewModel.allOff()
+                                        onAllOff()
                                     }
                                 )
                             }
@@ -299,7 +373,7 @@ fun HomeScreen(
                                     label = scene.name,
                                     icon = sceneIcon,
                                     isActive = executingSceneId == scene.id,
-                                    onClick = { viewModel.executeQuickScene(scene.id) }
+                                    onClick = { onExecuteScene(scene.id) }
                                 )
                             }
                         }
@@ -347,7 +421,7 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.height(16.dp))
                             SectionTitle(title = "Suggested Routines")
                         }
-                        items(recommendations, key = { "${it.device_id}:${it.action}:${it.suggested_time}" }) { rec ->
+                        items(recommendations, key = { "${it.device_id}:${it.action}:${it.trigger_time}" }) { rec ->
                             val actionIcon = when {
                                 rec.action.lowercase().contains("off") -> Icons.Default.PowerSettingsNew
                                 rec.action.lowercase().contains("on")  -> Icons.Default.Lightbulb
@@ -379,7 +453,7 @@ fun HomeScreen(
                                     }
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = rec.message,
+                                            text = rec.name,
                                             color = Color(0xFFE8F4F8),
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.Medium
@@ -393,14 +467,14 @@ fun HomeScreen(
                                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         // Create Routine button
                                         TextButton(
-                                            onClick = { viewModel.createRoutineFromRecommendation(rec) },
+                                            onClick = { onCreateRoutine(rec) },
                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                                         ) {
                                             Text("Create", color = Color(0xFF00BCD4), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                         }
                                         // Dismiss button
                                         IconButton(
-                                            onClick = { viewModel.dismissRecommendation(rec) },
+                                            onClick = { onDismissRecommendation(rec) },
                                             modifier = Modifier.size(28.dp)
                                         ) {
                                             Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = Color(0xFF7FA8BB), modifier = Modifier.size(16.dp))
@@ -417,9 +491,7 @@ fun HomeScreen(
                         SectionTitle(
                             title = "Rooms",
                             action = {
-                                TextButton(onClick = {
-                                    navController.navigate(NavRoutes.Devices.route)
-                                }) {
+                                TextButton(onClick = onDevicesClick) {
                                     Text("All", color = Primary, style = MaterialTheme.typography.labelLarge)
                                 }
                             }
@@ -437,7 +509,7 @@ fun HomeScreen(
                         } else {
                             RoomsGrid(
                                 rooms = rooms,
-                                onRoomClick = { navController.navigate(NavRoutes.Devices.route) },
+                                onRoomClick = { onDevicesClick() },
                                 onAddRoomClick = { showAddRoomDialog = true }
                             )
                         }
@@ -557,4 +629,145 @@ private fun RoomsGrid(
         }
     }
     Spacer(modifier = Modifier.height(8.dp))
+}
+
+// ── Preview fake data ────────────────────────────────────────────────────────────
+
+private val previewHomeUser = UserResponse(
+    id = 1,
+    username = "Denis",
+    email = "denis@example.com",
+    display_name = "Denis",
+    avatar_url = null,
+    created_at = "2026-01-01T00:00:00",
+    is_verified = true
+)
+
+private val previewHomeStats = DashboardStats(
+    total_devices = 12,
+    total_commands_today = 34,
+    total_routines_active = 3,
+    total_scenes = 4,
+    most_used_device = "Living Room Bulb",
+    peak_hour = 20,
+    commands_by_day = null,
+    commands_by_device = null,
+    device_type_distribution = null
+)
+
+private val previewHomeRooms = listOf(
+    RoomInfo("Living Room", 5, 3),
+    RoomInfo("Bedroom", 3, 1),
+    RoomInfo("Kitchen", 4, 4)
+)
+
+private val previewHomeScenes = listOf(
+    SceneResponse(
+        id = 1,
+        name = "Movie Night",
+        icon = null,
+        actions = listOf(SceneAction(device_id = 1, command_type = "off", command_data = null)),
+        is_active = true
+    ),
+    SceneResponse(
+        id = 2,
+        name = "Good Morning",
+        icon = null,
+        actions = listOf(SceneAction(device_id = 2, command_type = "on", command_data = null)),
+        is_active = true
+    )
+)
+
+private val previewHomeRecommendations = listOf(
+    RoutineCandidate(
+        device_id = 3,
+        device_name = "Living Room TV",
+        action = "off",
+        value = null,
+        trigger_time = "23:00",
+        days_of_week = "Mon,Tue,Wed,Thu,Fri",
+        occurrences = 14,
+        distinct_days = 5,
+        confidence = 0.87f,
+        name = "Turn off Living Room TV at 23:00",
+        candidate_index = 0
+    ),
+    RoutineCandidate(
+        device_id = 4,
+        device_name = "Bedroom Lamp",
+        action = "on",
+        value = null,
+        trigger_time = "07:00",
+        days_of_week = "Mon,Tue,Wed,Thu,Fri",
+        occurrences = 10,
+        distinct_days = 5,
+        confidence = 0.72f,
+        name = "Turn on Bedroom Lamp at 07:00",
+        candidate_index = 1
+    )
+)
+
+private val previewHomeAnomalies = listOf(
+    AnomalyItem(
+        device_id = 5,
+        device_name = "Kitchen Plug",
+        action = "on",
+        time = "03:14",
+        z_score = 3.2f,
+        message = "Kitchen Plug turned on at an unusual hour (03:14)"
+    )
+)
+
+@Preview(showBackground = true)
+@Composable
+fun HomeScreenPreview() {
+    SmartHomeTheme {
+        HomeScreenContent(
+            greeting = "Good morning",
+            currentDate = "Monday, March 17",
+            userName = previewHomeUser.username,
+            unreadCount = 2,
+            stats = previewHomeStats,
+            scenes = previewHomeScenes,
+            executingSceneId = null,
+            anomalies = previewHomeAnomalies,
+            recommendations = previewHomeRecommendations,
+            rooms = previewHomeRooms,
+            isLoading = false,
+            onRefresh = {},
+            onNotificationsClick = {},
+            onAllOff = {},
+            onExecuteScene = {},
+            onCreateRoutine = {},
+            onDismissRecommendation = {},
+            onDevicesClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun HomeScreenLoadingPreview() {
+    SmartHomeTheme {
+        HomeScreenContent(
+            greeting = "Good evening",
+            currentDate = "Monday, March 17",
+            userName = "",
+            unreadCount = 0,
+            stats = null,
+            scenes = emptyList(),
+            executingSceneId = null,
+            anomalies = emptyList(),
+            recommendations = emptyList(),
+            rooms = emptyList(),
+            isLoading = true,
+            onRefresh = {},
+            onNotificationsClick = {},
+            onAllOff = {},
+            onExecuteScene = {},
+            onCreateRoutine = {},
+            onDismissRecommendation = {},
+            onDevicesClick = {}
+        )
+    }
 }

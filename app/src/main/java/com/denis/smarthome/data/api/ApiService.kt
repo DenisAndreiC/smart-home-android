@@ -85,7 +85,10 @@ interface ApiService {
     suspend fun createRoutine(@Body body: RoutineCreate): RoutineResponse
 
     @GET("routines/detect")
-    suspend fun detectRoutines(): RoutineDetectResponse
+    suspend fun detectRoutines(
+        @Query("min_occurrences") minOccurrences: Int? = null,
+        @Query("min_distinct_days") minDistinctDays: Int? = null
+    ): RoutineDetectResponse
 
     @PUT("routines/{id}/toggle")
     suspend fun toggleRoutine(@Path("id") id: Int, @Body body: RoutineToggle): RoutineResponse
@@ -133,7 +136,8 @@ interface ApiService {
 
     @GET("ml/recommendations")
     suspend fun getRecommendations(
-        @Query("min_occurrences") minOccurrences: Int? = null
+        @Query("min_occurrences") minOccurrences: Int? = null,
+        @Query("min_distinct_days") minDistinctDays: Int? = null
     ): RecommendationsResponse
 
     @GET("ml/anomalies")

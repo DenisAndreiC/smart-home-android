@@ -201,11 +201,20 @@ class ScenesViewModel(application: Application) : AndroidViewModel(application) 
      * GET /routines/detect este READ-ONLY — nu salveaza nimic, doar returneaza
      * candidati. Daca exista candidati, deschidem dialogul de selectie; altfel
      * afisam un mesaj ca nu s-a gasit nimic nou.
+     *
+     * Citim min_occurrences/min_days curente din Settings (GET /ml/settings) si le
+     * trimitem explicit ca parametri catre /routines/detect, ca dialogul sa arate
+     * exact aceeasi lista de candidati ca recomandarile de pe dashboard pentru
+     * aceleasi valori de slider.
      */
     fun generateMlRoutines() {
         viewModelScope.launch {
             _isLoadingRoutines.value = true
-            routineRepository.detectRoutines()
+            val settings = runCatching { RetrofitClient.apiService.getMLSettings() }.getOrNull()
+            routineRepository.detectRoutines(
+                minOccurrences = settings?.min_occurrences,
+                minDistinctDays = settings?.min_days
+            )
                 .onSuccess { result ->
                     if (result.data.isEmpty()) {
                         _mlMessage.value = "No new routines detected"

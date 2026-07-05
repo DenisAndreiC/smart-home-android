@@ -18,7 +18,7 @@ import com.denis.smarthome.data.api.RetrofitClient
 import com.denis.smarthome.data.local.TokenManager
 import com.denis.smarthome.data.model.AnomalyItem
 import com.denis.smarthome.data.model.DashboardStats
-import com.denis.smarthome.data.model.RoutineRecommendation
+import com.denis.smarthome.data.model.RoutineCandidate
 import com.denis.smarthome.data.model.SceneResponse
 import com.denis.smarthome.data.model.UserResponse
 import com.denis.smarthome.data.repository.AuthRepository
@@ -91,8 +91,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val executingSceneId: StateFlow<Int?> = _executingSceneId.asStateFlow()
 
     // ML routine recommendations from GET /ml/recommendations
-    private val _recommendations = MutableStateFlow<List<RoutineRecommendation>>(emptyList())
-    val recommendations: StateFlow<List<RoutineRecommendation>> = _recommendations.asStateFlow()
+    private val _recommendations = MutableStateFlow<List<RoutineCandidate>>(emptyList())
+    val recommendations: StateFlow<List<RoutineCandidate>> = _recommendations.asStateFlow()
 
     // Dismissed recommendation device_ids+actions stored locally so they don't reappear
     private val _dismissedKeys = MutableStateFlow<Set<String>>(emptySet())
@@ -172,8 +172,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             runCatching { RetrofitClient.apiService.getScenes() }
                 .onSuccess { _scenes.value = it }
 
-            // Load ML routine recommendations; filter out already-dismissed ones
-            runCatching { RetrofitClient.apiService.getRecommendations() }
+            // Load ML routine recommendations; filter out already-dismissed ones.
+            // min_occurrences/min_distinct_days sunt trimise explicit din Settings, ca
+            // dashboard-ul sa arate exact aceeasi lista ca dialogul "Select Routines to
+            // Create" din Scenes pentru aceleasi valori de slider.
+            val mlSettings = runCatching { RetrofitClient.apiService.getMLSettings() }.getOrNull()
+            runCatching {
+                RetrofitClient.apiService.getRecommendations(
+                    minOccurrences = mlSettings?.min_occurrences,
+                    minDistinctDays = mlSettings?.min_days
+                )
+            }
                 .onSuccess { response ->
                     val dismissed = _dismissedKeys.value
                     _recommendations.value = response.recommendations
@@ -193,7 +202,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * Removes a recommendation from the visible list by adding its key to the dismissed set.
      * Dismissed recommendations survive a dashboard refresh within the same session.
      */
-    fun dismissRecommendation(recommendation: RoutineRecommendation) {
+    fun dismissRecommendation(recommendation: RoutineCandidate) {
         val key = "${recommendation.device_id}:${recommendation.action}"
         _dismissedKeys.value = _dismissedKeys.value + key
         _recommendations.value = _recommendations.value.filter { r ->
@@ -203,21 +212,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Creates a Routine from a dashboard ML recommendation via POST /api/routines/.
-     * This must create a Routine (not a Scene) so it shows up in the Routines tab,
-     * not the Scenes tab — the recommendation only has device_id/action/suggested_time,
-     * so value is left null and days_of_week defaults to every day (the simpler
-     * /ml/recommendations endpoint does not return specific days like /routines/detect does).
+     * This must create a Routine (not a Scene) so it shows up in the Routines tab, not
+     * the Scenes tab. /ml/recommendations now returns the same detect_routines() shape
+     * as /routines/detect (unified backend function), so trigger_time/days_of_week/value/name
+     * come directly from the recommendation instead of being guessed/defaulted.
      */
-    fun createRoutineFromRecommendation(recommendation: RoutineRecommendation) {
+    fun createRoutineFromRecommendation(recommendation: RoutineCandidate) {
         viewModelScope.launch {
             runCatching {
                 val request = com.denis.smarthome.data.model.RoutineCreate(
-                    name = "${recommendation.device_name} at ${recommendation.suggested_time}",
+                    name = recommendation.name,
                     device_id = recommendation.device_id,
                     action = recommendation.action,
-                    value = null,
-                    trigger_time = recommendation.suggested_time,
-                    days_of_week = "1,2,3,4,5,6,7"
+                    value = recommendation.value,
+                    trigger_time = recommendation.trigger_time,
+                    days_of_week = recommendation.days_of_week
                 )
                 RetrofitClient.apiService.createRoutine(request)
             }.onSuccess {

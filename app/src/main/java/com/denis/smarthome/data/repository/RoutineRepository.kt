@@ -38,8 +38,18 @@ class RoutineRepository(private val apiService: ApiService) {
         apiService.deleteRoutine(id)
     }
 
-    /** Ruleaza detectia ML (DBSCAN) pe istoricul de comenzi si salveaza tiparele noi ca rutine inactive. */
-    suspend fun detectRoutines(): Result<RoutineDetectResponse> = runCatching {
-        apiService.detectRoutines()
+    /**
+     * Ruleaza detectia ML (DBSCAN) pe istoricul de comenzi si returneaza candidati (read-only).
+     *
+     * [minOccurrences]/[minDistinctDays] trebuie sa fie valorile curente ale slider-elor din
+     * Settings, trimise explicit ca parametri — astfel dialogul "Select Routines to Create"
+     * arata exact aceeasi lista ca recomandarile de pe dashboard (GET /ml/recommendations),
+     * care foloseste aceeasi functie de detectie pe backend.
+     */
+    suspend fun detectRoutines(
+        minOccurrences: Int? = null,
+        minDistinctDays: Int? = null
+    ): Result<RoutineDetectResponse> = runCatching {
+        apiService.detectRoutines(minOccurrences, minDistinctDays)
     }
 }

@@ -170,19 +170,8 @@ data class EnergyStats(
 
 // ── ML ─────────────────────────────────────────────────────────────────────────
 
-data class RoutineRecommendation(
-    @SerializedName("device_id")      val device_id: Int,
-    @SerializedName("device_name")    val device_name: String,
-    val action: String,
-    @SerializedName("suggested_time") val suggested_time: String,
-    val confidence: Float,
-    val occurrences: Int,
-    @SerializedName("distinct_days")  val distinct_days: Int = 0,
-    val message: String
-)
-
 data class RecommendationsResponse(
-    val recommendations: List<RoutineRecommendation>,
+    val recommendations: List<RoutineCandidate>,
     @SerializedName("analyzed_days")   val analyzed_days: Int,
     @SerializedName("total_commands")  val total_commands: Int
 )
@@ -243,18 +232,33 @@ data class RoutineResponse(
 
 /**
  * Un candidat de rutina detectat de ML — NU e inca persistat pe backend.
- * candidate_index identifica sugestia in cadrul unui singur raspuns /routines/detect
- * (nu exista un id de baza de date pana cand utilizatorul nu alege sa il creeze).
+ *
+ * Model comun pentru GET /routines/detect si GET /ml/recommendations: backend-ul
+ * foloseste aceeasi functie detect_routines() pentru ambele, deci returneaza exact
+ * aceleasi campuri. candidate_index e prezent doar in raspunsul /routines/detect
+ * (identifica sugestia in cadrul acelui raspuns — nu exista inca un id de baza de
+ * date pana cand utilizatorul nu alege sa creeze rutina); lipseste din /ml/recommendations.
+ *
+ * candidate_index e nullable (nu are default numeric) intentionat: Retrofit foloseste
+ * GsonConverterFactory simplu (fara adapter Kotlin-aware), care aloca obiectul prin
+ * reflectie si NU trece prin constructor — orice default din Kotlin pentru un camp
+ * numeric absent din JSON ar fi ignorat silentios (Gson ar lasa 0, nu valoarea default
+ * declarata). Un tip nullable primeste corect `null` de la Gson cand cheia lipseste din
+ * JSON, deci codul care citeste candidate_index trebuie sa trateze explicit cazul null
+ * (nu presupune niciodata ca e valid/unic pentru elemente venite din /ml/recommendations).
  */
 data class RoutineCandidate(
     @SerializedName("device_id")       val device_id: Int,
+    @SerializedName("device_name")     val device_name: String = "",
     val action: String,
     val value: String?,
     @SerializedName("trigger_time")    val trigger_time: String,
     @SerializedName("days_of_week")    val days_of_week: String,
+    val occurrences: Int = 0,
+    @SerializedName("distinct_days")   val distinct_days: Int = 0,
     val confidence: Float,
     val name: String,
-    @SerializedName("candidate_index") val candidate_index: Int
+    @SerializedName("candidate_index") val candidate_index: Int? = null
 )
 
 data class RoutineDetectResponse(

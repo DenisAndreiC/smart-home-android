@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -41,8 +42,9 @@ import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.LampControlViewModel
 
 /**
- * Ecranul principal de control al lampii/relay-ului.
- * Afiseaza starea curenta (ON/OFF) si permite pornirea/oprirea prin LargeToggleSwitch.
+ * Ecranul principal de control al lampii/relay-ului — wrapper subtire peste ViewModel.
+ * Citeste starea din [LampControlViewModel] si o paseaza catre [LampControlScreenContent],
+ * care contine tot UI-ul si nu depinde de ViewModel (poate fi randat direct in @Preview).
  *
  * @param navController pentru navigare inapoi
  * @param device datele dispozitivului (nume si camera)
@@ -58,15 +60,37 @@ fun LampControlScreen(
     val viewModel: LampControlViewModel = viewModel(
         factory = LampControlViewModel.Factory(app, deviceId, device.last_status)
     )
-    val isOn       by viewModel.isOn.collectAsState()
-    val isDeleted  by viewModel.isDeleted.collectAsState()
-
-    var showMenu         by remember { mutableStateOf(false) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
+    val isOn      by viewModel.isOn.collectAsState()
+    val isDeleted by viewModel.isDeleted.collectAsState()
 
     LaunchedEffect(isDeleted) {
         if (isDeleted) navController.popBackStack()
     }
+
+    LampControlScreenContent(
+        device = device,
+        isOn = isOn,
+        onBack = { navController.popBackStack() },
+        onDeleteConfirm = { viewModel.deleteDevice() },
+        onTogglePower = { viewModel.togglePower() }
+    )
+}
+
+/**
+ * UI-ul ecranului de control al lampii/relay-ului, fara dependinta de ViewModel.
+ * Primeste toata starea ca parametri simpli, ceea ce permite randare in @Preview
+ * fara apeluri de retea.
+ */
+@Composable
+fun LampControlScreenContent(
+    device: DeviceResponse,
+    isOn: Boolean,
+    onBack: () -> Unit,
+    onDeleteConfirm: () -> Unit,
+    onTogglePower: () -> Unit
+) {
+    var showMenu         by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     if (showDeleteDialog) {
         AlertDialog(
@@ -78,7 +102,7 @@ fun LampControlScreen(
             text = { Text("Delete \"${device.name}\"? This cannot be undone.") },
             confirmButton = {
                 Button(
-                    onClick = { showDeleteDialog = false; viewModel.deleteDevice() },
+                    onClick = { showDeleteDialog = false; onDeleteConfirm() },
                     colors = ButtonDefaults.buttonColors(containerColor = ErrorColor)
                 ) { Text("Delete", color = Color.White, fontWeight = FontWeight.SemiBold) }
             },
@@ -108,7 +132,7 @@ fun LampControlScreen(
                     .padding(horizontal = 4.dp, vertical = 8.dp)
             ) {
                 IconButton(
-                    onClick = { navController.popBackStack() },
+                    onClick = onBack,
                     modifier = Modifier.align(Alignment.CenterStart)
                 ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = OnSurface)
@@ -191,11 +215,55 @@ fun LampControlScreen(
                 // Switch supradimensionat pentru pornire/oprire facila a lampii
                 LargeToggleSwitch(
                     checked = isOn,
-                    onCheckedChange = { viewModel.togglePower() }
+                    onCheckedChange = { onTogglePower() }
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
+    }
+}
+
+private val previewLampDevice = DeviceResponse(
+    id = 2,
+    name = "Living Room Lamp",
+    device_type = "relay",
+    room = "Living Room",
+    room_id = 1,
+    mqtt_topic = null,
+    is_online = true,
+    last_status = "on",
+    mac_address = null,
+    ir_codes = null,
+    ir_remote_type = null,
+    owner_id = 1,
+    created_at = "2026-01-01T00:00:00"
+)
+
+@Preview(showBackground = true)
+@Composable
+fun LampControlScreenOnPreview() {
+    SmartHomeTheme {
+        LampControlScreenContent(
+            device = previewLampDevice,
+            isOn = true,
+            onBack = {},
+            onDeleteConfirm = {},
+            onTogglePower = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun LampControlScreenOffPreview() {
+    SmartHomeTheme {
+        LampControlScreenContent(
+            device = previewLampDevice.copy(is_online = false, last_status = "off"),
+            isOn = false,
+            onBack = {},
+            onDeleteConfirm = {},
+            onTogglePower = {}
+        )
     }
 }

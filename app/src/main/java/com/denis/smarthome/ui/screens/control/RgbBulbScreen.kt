@@ -2,7 +2,7 @@
  * RgbBulbScreen.kt - Ecran de control pentru becul RGB controlat prin IR
  *
  * Afiseaza un cerc hero cu efect de glow care reflecta culoarea activa,
- * un card power cu switch, doua butoane de luminozitate (step up/down),
+ * doua butoane de luminozitate (step up/down; nu exista buton on/off separat),
  * un grid cu butoanele de culori fixe ale telecomenzii IR si butonul pentru efectul Ice.
  *
  * NOTA: Becul RGB este non-smart, controlat prin telecomanda IR (NEC protocol).
@@ -38,24 +38,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.denis.smarthome.data.model.DeviceResponse
 import com.denis.smarthome.ui.theme.*
+import com.denis.smarthome.viewmodel.IrColorButton as IrColorButtonModel
 import com.denis.smarthome.viewmodel.RgbBulbViewModel
 import com.denis.smarthome.viewmodel.rgbIrColors
 
 /**
- * Ecranul principal de control al becului RGB prin IR.
- *
- * Layout:
- * 1. Hero circle — reflecta culoarea activa cu efect glow
- * 2. Power card — switch on/off
- * 3. Brightness card — doua butoane ▲/▼ (step up/down, nu slider)
- * 4. Color grid — butoane pentru culorile fixe ale telecomenzii IR
- * 5. Effects — buton Ice
+ * Ecranul principal de control al becului RGB prin IR — wrapper subtire peste ViewModel.
+ * Citeste starea din [RgbBulbViewModel] si o paseaza catre [RgbBulbScreenContent], care
+ * contine tot UI-ul si nu depinde de ViewModel (poate fi randat direct in @Preview).
  *
  * @param navController pentru navigare inapoi
  * @param device datele dispozitivului (nume si camera)
@@ -76,12 +73,50 @@ fun RgbBulbScreen(
     val activeColorCommand by viewModel.activeColorCommand.collectAsState()
     val isDeleted          by viewModel.isDeleted.collectAsState()
 
-    var showMenu         by remember { mutableStateOf(false) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
-
     LaunchedEffect(isDeleted) {
         if (isDeleted) navController.popBackStack()
     }
+
+    RgbBulbScreenContent(
+        device = device,
+        isOn = isOn,
+        selectedColor = selectedColor,
+        activeColorCommand = activeColorCommand,
+        onBack = { navController.popBackStack() },
+        onDeleteConfirm = { viewModel.deleteDevice() },
+        onColorSelect = { viewModel.selectColor(it) },
+        onBrightnessUp = { viewModel.brightnessUp() },
+        onBrightnessDown = { viewModel.brightnessDown() },
+        onIce = { viewModel.effectIce() }
+    )
+}
+
+/**
+ * UI-ul ecranului de control al becului RGB, fara dependinta de ViewModel.
+ * Primeste toata starea ca parametri simpli, ceea ce permite randare in @Preview
+ * fara apeluri de retea.
+ *
+ * Layout:
+ * 1. Hero circle — reflecta culoarea activa cu efect glow
+ * 2. Brightness card — doua butoane ▲/▼ (step up/down, nu slider; nu exista on/off)
+ * 3. Color grid — butoane pentru culorile fixe ale telecomenzii IR
+ * 4. Effects — buton Ice
+ */
+@Composable
+fun RgbBulbScreenContent(
+    device: DeviceResponse,
+    isOn: Boolean,
+    selectedColor: Color,
+    activeColorCommand: String,
+    onBack: () -> Unit,
+    onDeleteConfirm: () -> Unit,
+    onColorSelect: (IrColorButtonModel) -> Unit,
+    onBrightnessUp: () -> Unit,
+    onBrightnessDown: () -> Unit,
+    onIce: () -> Unit
+) {
+    var showMenu         by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     if (showDeleteDialog) {
         AlertDialog(
@@ -93,7 +128,7 @@ fun RgbBulbScreen(
             text = { Text("Delete \"${device.name}\"? This cannot be undone.") },
             confirmButton = {
                 Button(
-                    onClick = { showDeleteDialog = false; viewModel.deleteDevice() },
+                    onClick = { showDeleteDialog = false; onDeleteConfirm() },
                     colors = ButtonDefaults.buttonColors(containerColor = ErrorColor)
                 ) { Text("Delete", color = Color.White, fontWeight = FontWeight.SemiBold) }
             },
@@ -124,7 +159,7 @@ fun RgbBulbScreen(
                     .padding(horizontal = 4.dp, vertical = 8.dp)
             ) {
                 IconButton(
-                    onClick = { navController.popBackStack() },
+                    onClick = onBack,
                     modifier = Modifier.align(Alignment.CenterStart)
                 ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = OnSurface)
@@ -224,35 +259,6 @@ fun RgbBulbScreen(
                     )
                 }
 
-                // ── Power Card ────────────────────────────────────────────────
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Surface),
-                    shape = RoundedCornerShape(16.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.PowerSettingsNew, contentDescription = null, tint = Primary, modifier = Modifier.size(22.dp))
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text("Power", color = OnBackground, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                        Switch(
-                            checked = isOn,
-                            onCheckedChange = { viewModel.togglePower() },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = Primary,
-                                uncheckedThumbColor = OnSurface,
-                                uncheckedTrackColor = SurfaceVariant
-                            )
-                        )
-                    }
-                }
-
                 // ── Brightness Card ───────────────────────────────────────────
                 // Doua butoane mari pentru brightness up/down (step-based, nu slider).
                 // Becul IR nu suporta procente — doar increment/decrement pe butonul fizic.
@@ -288,7 +294,7 @@ fun RgbBulbScreen(
                         ) {
                             // Brightness Down button
                             Button(
-                                onClick = { viewModel.brightnessDown() },
+                                onClick = onBrightnessDown,
                                 enabled = isOn,
                                 modifier = Modifier
                                     .weight(1f)
@@ -307,12 +313,12 @@ fun RgbBulbScreen(
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Darker", fontWeight = FontWeight.Medium)
+                                Text("Lumina mai slaba", fontWeight = FontWeight.Medium)
                             }
 
                             // Brightness Up button
                             Button(
-                                onClick = { viewModel.brightnessUp() },
+                                onClick = onBrightnessUp,
                                 enabled = isOn,
                                 modifier = Modifier
                                     .weight(1f)
@@ -331,7 +337,7 @@ fun RgbBulbScreen(
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Brighter", fontWeight = FontWeight.Medium)
+                                Text("Lumina mai tare", fontWeight = FontWeight.Medium)
                             }
                         }
                     }
@@ -361,7 +367,7 @@ fun RgbBulbScreen(
                                 irColor = irColor,
                                 isSelected = activeColorCommand == irColor.irCommand,
                                 isEnabled = isOn,
-                                onClick = { viewModel.selectColor(irColor) }
+                                onClick = { onColorSelect(irColor) }
                             )
                         }
                     }
@@ -382,7 +388,7 @@ fun RgbBulbScreen(
 
                     // Ice effect button
                     OutlinedButton(
-                        onClick = { viewModel.effectIce() },
+                        onClick = onIce,
                         enabled = isOn,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -411,6 +417,60 @@ fun RgbBulbScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
+    }
+}
+
+private val previewRgbBulbDevice = DeviceResponse(
+    id = 1,
+    name = "Living Room Bulb",
+    device_type = "ir_rgb",
+    room = "Living Room",
+    room_id = 1,
+    mqtt_topic = null,
+    is_online = true,
+    last_status = "on",
+    mac_address = null,
+    ir_codes = null,
+    ir_remote_type = "24-key",
+    owner_id = 1,
+    created_at = "2026-01-01T00:00:00"
+)
+
+@Preview(showBackground = true)
+@Composable
+fun RgbBulbScreenOnPreview() {
+    SmartHomeTheme {
+        RgbBulbScreenContent(
+            device = previewRgbBulbDevice,
+            isOn = true,
+            selectedColor = Color(0xFFFF0000),
+            activeColorCommand = "red",
+            onBack = {},
+            onDeleteConfirm = {},
+            onColorSelect = {},
+            onBrightnessUp = {},
+            onBrightnessDown = {},
+            onIce = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun RgbBulbScreenOffPreview() {
+    SmartHomeTheme {
+        RgbBulbScreenContent(
+            device = previewRgbBulbDevice.copy(is_online = false, last_status = "off"),
+            isOn = false,
+            selectedColor = Color(0xFFFF0000),
+            activeColorCommand = "red",
+            onBack = {},
+            onDeleteConfirm = {},
+            onColorSelect = {},
+            onBrightnessUp = {},
+            onBrightnessDown = {},
+            onIce = {}
+        )
     }
 }
 
