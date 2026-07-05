@@ -11,10 +11,7 @@
 package com.denis.smarthome.data.repository
 
 import com.denis.smarthome.data.api.ApiService
-import com.denis.smarthome.data.model.CommandRequest
-import com.denis.smarthome.data.model.CommandResponse
-import com.denis.smarthome.data.model.DeviceRequest
-import com.denis.smarthome.data.model.DeviceResponse
+import com.denis.smarthome.data.model.*
 
 /**
  * Repository care expune operatiile pe dispozitive si comenzi catre stratul ViewModel.
@@ -79,8 +76,24 @@ class DeviceRepository(private val apiService: ApiService) {
      * @return Result.success(lista) cu numele camerelor (ex: ["Living", "Dormitor"]),
      *         Result.failure(exceptie) la eroare de retea
      */
-    suspend fun getRooms(): Result<List<String>> = runCatching {
+    suspend fun getRooms(): Result<List<RoomResponse>> = runCatching {
         apiService.getRooms()
+    }
+
+    suspend fun createRoom(name: String): Result<RoomResponse> = runCatching {
+        apiService.createRoom(RoomRequest(name))
+    }
+
+    suspend fun deleteRoom(id: Int): Result<Unit> = runCatching {
+        apiService.deleteRoom(id)
+    }
+
+    suspend fun getDevice(id: Int): Result<DeviceResponse> = runCatching {
+        apiService.getDevice(id)
+    }
+
+    suspend fun setBrand(brand: String): Result<CommandResponse> = runCatching {
+        apiService.setBrand(brand)
     }
 
     /**
@@ -97,4 +110,8 @@ class DeviceRepository(private val apiService: ApiService) {
     suspend fun sendCommand(request: CommandRequest): Result<CommandResponse> = runCatching {
         apiService.sendCommand(request)
     }
+
+    suspend fun allOff(): Result<CommandResponse> = runCatching { apiService.allOff() }
+
+    suspend fun awayMode(): Result<CommandResponse> = runCatching { apiService.awayMode() }
 }

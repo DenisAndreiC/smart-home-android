@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -41,11 +42,13 @@ import com.denis.smarthome.viewmodel.AuthState
 import com.denis.smarthome.viewmodel.AuthViewModel
 
 /**
- * Ecranul de creare cont nou.
+ * Ecranul de creare cont nou — wrapper subtire peste ViewModel.
  *
  * Starea formularului este tinuta local cu [remember]. [collectAsState] transforma
  * StateFlow-ul din ViewModel intr-o valoare reactiva Compose. [LaunchedEffect] cu
  * cheia [authState] detecteaza succesul si navigheaza la Home, curatand Login din stiva.
+ * Starea este pasata catre [RegisterScreenContent], care contine tot UI-ul si nu
+ * depinde de ViewModel (poate fi randat direct in @Preview).
  *
  * @param navController Controlerul de navigare Compose
  * @param authViewModel ViewModel-ul care gestioneaza logica de autentificare
@@ -79,6 +82,90 @@ fun RegisterScreen(
         }
     }
 
+    RegisterScreenContent(
+        name = name,
+        email = email,
+        password = password,
+        confirmPassword = confirmPassword,
+        passwordVisible = passwordVisible,
+        confirmPasswordVisible = confirmPasswordVisible,
+        termsAccepted = termsAccepted,
+        isLoading = isLoading,
+        errorMessage = errorMessage,
+        onNameChange = { name = it },
+        onEmailChange = { email = it },
+        onPasswordChange = { password = it },
+        onConfirmPasswordChange = { confirmPassword = it },
+        onPasswordVisibleToggle = { passwordVisible = !passwordVisible },
+        onConfirmPasswordVisibleToggle = { confirmPasswordVisible = !confirmPasswordVisible },
+        onTermsAcceptedChange = { termsAccepted = it },
+        onRegisterClick = {
+            when {
+                password != confirmPassword -> authViewModel.resetState().also { /* mismatch handled visually */ }
+                !termsAccepted -> { /* show toast - terms not accepted */ }
+                else -> authViewModel.register(name, email, password)
+            }
+        },
+        onBack = {
+            authViewModel.resetState()
+            navController.popBackStack()
+        },
+        onLoginClick = {
+            authViewModel.resetState()
+            navController.popBackStack()
+        }
+    )
+}
+
+/**
+ * UI-ul ecranului de inregistrare, fara dependinta de ViewModel.
+ * Primeste toata starea ca parametri simpli, ceea ce permite randare in @Preview
+ * fara apeluri de retea.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RegisterScreenContent(
+    name: String,
+    email: String,
+    password: String,
+    confirmPassword: String,
+    passwordVisible: Boolean,
+    confirmPasswordVisible: Boolean,
+    termsAccepted: Boolean,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onNameChange: (String) -> Unit,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onConfirmPasswordChange: (String) -> Unit,
+    onPasswordVisibleToggle: () -> Unit,
+    onConfirmPasswordVisibleToggle: () -> Unit,
+    onTermsAcceptedChange: (Boolean) -> Unit,
+    onRegisterClick: () -> Unit,
+    onBack: () -> Unit,
+    onLoginClick: () -> Unit
+) {
+    var showLicenseDialog by remember { mutableStateOf(false) }
+
+    if (showLicenseDialog) {
+        AlertDialog(
+            onDismissRequest = { showLicenseDialog = false },
+            containerColor = Surface,
+            title = { Text("Terms & Privacy", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "This application is a thesis project. Data is stored locally and is not shared with third parties.",
+                    color = OnSurface
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showLicenseDialog = false }) {
+                    Text("OK", color = Primary)
+                }
+            }
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -92,10 +179,7 @@ fun RegisterScreen(
                 TopAppBar(
                     title = { Text("Create Account", color = OnBackground) },
                     navigationIcon = {
-                        IconButton(onClick = {
-                            authViewModel.resetState()
-                            navController.popBackStack()
-                        }) {
+                        IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Back",
@@ -146,7 +230,7 @@ fun RegisterScreen(
                 // ── Formular: camp Nume complet ──
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = onNameChange,
                     label = { Text("Full Name") },
                     leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
                     singleLine = true,
@@ -159,7 +243,7 @@ fun RegisterScreen(
                 // ── Formular: camp Email ──
                 OutlinedTextField(
                     value = email,
-                    onValueChange = { email = it },
+                    onValueChange = onEmailChange,
                     label = { Text("Email Address") },
                     placeholder = { Text("name@example.com") },
                     leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
@@ -174,11 +258,11 @@ fun RegisterScreen(
                 // ── Formular: camp Parola cu toggle vizibilitate ──
                 OutlinedTextField(
                     value = password,
-                    onValueChange = { password = it },
+                    onValueChange = onPasswordChange,
                     label = { Text("Password") },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     trailingIcon = {
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        IconButton(onClick = onPasswordVisibleToggle) {
                             Icon(
                                 imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                                 contentDescription = null,
@@ -198,11 +282,11 @@ fun RegisterScreen(
                 // ── Formular: camp confirmare parola cu validare vizuala isError ──
                 OutlinedTextField(
                     value = confirmPassword,
-                    onValueChange = { confirmPassword = it },
+                    onValueChange = onConfirmPasswordChange,
                     label = { Text("Confirm Password") },
                     leadingIcon = { Icon(Icons.Default.Shield, contentDescription = null) },
                     trailingIcon = {
-                        IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                        IconButton(onClick = onConfirmPasswordVisibleToggle) {
                             Icon(
                                 imageVector = if (confirmPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                                 contentDescription = null,
@@ -232,7 +316,7 @@ fun RegisterScreen(
                 ) {
                     Checkbox(
                         checked = termsAccepted,
-                        onCheckedChange = { termsAccepted = it },
+                        onCheckedChange = onTermsAcceptedChange,
                         colors = CheckboxDefaults.colors(
                             checkedColor = Primary,
                             uncheckedColor = Outline,
@@ -250,7 +334,7 @@ fun RegisterScreen(
                         color = Primary,
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.clickable { }
+                        modifier = Modifier.clickable { showLicenseDialog = true }
                     )
                     Text(
                         text = " and ",
@@ -262,7 +346,7 @@ fun RegisterScreen(
                         color = Primary,
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.clickable { }
+                        modifier = Modifier.clickable { showLicenseDialog = true }
                     )
                 }
 
@@ -289,13 +373,7 @@ fun RegisterScreen(
 
                 // ── Butonul de creare cont: enabled doar cand termenii sunt acceptati si parolele coincid ──
                 Button(
-                    onClick = {
-                        when {
-                            password != confirmPassword -> authViewModel.resetState().also { /* mismatch handled visually */ }
-                            !termsAccepted -> { /* show toast - terms not accepted */ }
-                            else -> authViewModel.register(name, email, password)
-                        }
-                    },
+                    onClick = onRegisterClick,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
@@ -314,50 +392,6 @@ fun RegisterScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // ── Separator orizontal cu eticheta OR SIGN UP WITH ──
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = Outline)
-                    Text("  OR SIGN UP WITH  ", color = OnSurface, style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp)
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = Outline)
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // ── Butoane sociale Google si Apple (UI only, fara integrare reala) ──
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Outline),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = OnBackground)
-                    ) {
-                        Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Google", style = MaterialTheme.typography.labelLarge)
-                    }
-                    OutlinedButton(
-                        onClick = { },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Outline),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = OnBackground)
-                    ) {
-                        Icon(Icons.Default.PhoneIphone, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Apple", style = MaterialTheme.typography.labelLarge)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
                 // ── Link catre ecranul de login pentru utilizatorii cu cont existent ──
                 Row(horizontalArrangement = Arrangement.Center) {
                     Text("Already have an account? ", color = OnSurface, style = MaterialTheme.typography.bodySmall)
@@ -366,13 +400,66 @@ fun RegisterScreen(
                         color = Primary,
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.clickable {
-                            authViewModel.resetState()
-                            navController.popBackStack()
-                        }
+                        modifier = Modifier.clickable(onClick = onLoginClick)
                     )
                 }
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun RegisterScreenPreview() {
+    SmartHomeTheme {
+        RegisterScreenContent(
+            name = "",
+            email = "",
+            password = "",
+            confirmPassword = "",
+            passwordVisible = false,
+            confirmPasswordVisible = false,
+            termsAccepted = false,
+            isLoading = false,
+            errorMessage = null,
+            onNameChange = {},
+            onEmailChange = {},
+            onPasswordChange = {},
+            onConfirmPasswordChange = {},
+            onPasswordVisibleToggle = {},
+            onConfirmPasswordVisibleToggle = {},
+            onTermsAcceptedChange = {},
+            onRegisterClick = {},
+            onBack = {},
+            onLoginClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun RegisterScreenErrorPreview() {
+    SmartHomeTheme {
+        RegisterScreenContent(
+            name = "Ana Popescu",
+            email = "ana@example.com",
+            password = "parola123",
+            confirmPassword = "parola124",
+            passwordVisible = false,
+            confirmPasswordVisible = false,
+            termsAccepted = true,
+            isLoading = false,
+            errorMessage = "Email already registered",
+            onNameChange = {},
+            onEmailChange = {},
+            onPasswordChange = {},
+            onConfirmPasswordChange = {},
+            onPasswordVisibleToggle = {},
+            onConfirmPasswordVisibleToggle = {},
+            onTermsAcceptedChange = {},
+            onRegisterClick = {},
+            onBack = {},
+            onLoginClick = {}
+        )
     }
 }

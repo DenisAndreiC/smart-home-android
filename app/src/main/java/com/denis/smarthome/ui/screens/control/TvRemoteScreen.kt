@@ -17,9 +17,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -39,9 +40,10 @@ import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.TvRemoteViewModel
 
 /**
- * Ecranul principal al telecomenzii virtuale pentru TV.
- * Colecteaza starea isOn si isMuted din TvRemoteViewModel si afiseaza
- * o interfata scrollabila cu toate controalele telecomenzii.
+ * Ecranul principal al telecomenzii virtuale pentru TV — wrapper subtire peste ViewModel.
+ * Colecteaza starea isOn si isMuted din [TvRemoteViewModel] si o paseaza catre
+ * [TvRemoteScreenContent], care contine tot UI-ul si nu depinde de ViewModel (poate fi
+ * randat direct in @Preview).
  *
  * @param navController pentru butonul de intoarcere din top bar
  * @param device obiectul DeviceResponse cu numele si camera dispozitivului
@@ -59,16 +61,31 @@ fun TvRemoteScreen(
     )
     val isOn by viewModel.isOn.collectAsState()
     val isMuted by viewModel.isMuted.collectAsState()
-    val error by viewModel.error.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(error) {
-        error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
-    }
+    TvRemoteScreenContent(
+        device = device,
+        isOn = isOn,
+        isMuted = isMuted,
+        onBack = { navController.popBackStack() },
+        onSendCommand = { viewModel.sendCommand(it) }
+    )
+}
 
+/**
+ * UI-ul telecomenzii virtuale pentru TV, fara dependinta de ViewModel.
+ * Primeste toata starea ca parametri simpli, ceea ce permite randare in @Preview
+ * fara apeluri de retea.
+ */
+@Composable
+fun TvRemoteScreenContent(
+    device: DeviceResponse,
+    isOn: Boolean,
+    isMuted: Boolean,
+    onBack: () -> Unit,
+    onSendCommand: (String) -> Unit
+) {
     Scaffold(
-        containerColor = Background,
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        containerColor = Background
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -86,10 +103,10 @@ fun TvRemoteScreen(
                     .padding(horizontal = 8.dp, vertical = 12.dp)
             ) {
                 IconButton(
-                    onClick = { navController.popBackStack() },
+                    onClick = onBack,
                     modifier = Modifier.align(Alignment.CenterStart)
                 ) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = OnSurface)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = OnSurface)
                 }
                 Column(modifier = Modifier.align(Alignment.Center)) {
                     Text(
@@ -99,7 +116,7 @@ fun TvRemoteScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = device.room,
+                        text = device.room ?: "",
                         color = OnSurface,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -131,7 +148,7 @@ fun TvRemoteScreen(
                         .clip(CircleShape)
                         .background(Color(0xFF2A1A1A))
                         .border(2.dp, Color(0xFF8B0000), CircleShape)
-                        .clickable { viewModel.sendCommand("power") },
+                        .clickable { onSendCommand("power") },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -144,7 +161,7 @@ fun TvRemoteScreen(
 
                 // ── VOL / CH row ─────────────────────────────────────────────
                 // Rand cu trei coloane: VOL (stanga), NavigationPad (centru), CH (dreapta)
-                // Fiecare buton apeleaza viewModel.sendCommand() cu comanda corespunzatoare
+                // Fiecare buton apeleaza onSendCommand() cu comanda corespunzatoare
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
@@ -156,18 +173,18 @@ fun TvRemoteScreen(
                     ) {
                         Text("VOL", color = OnSurface, style = MaterialTheme.typography.labelMedium)
                         RemoteButton(
-                            onClick = { viewModel.sendCommand("vol_up") },
+                            onClick = { onSendCommand("vol_up") },
                             icon = Icons.Default.Add,
                             size = 52.dp
                         )
                         RemoteButton(
-                            onClick = { viewModel.sendCommand("mute") },
+                            onClick = { onSendCommand("mute") },
                             icon = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
                             iconTint = if (isMuted) Primary else OnBackground,
                             size = 52.dp
                         )
                         RemoteButton(
-                            onClick = { viewModel.sendCommand("vol_down") },
+                            onClick = { onSendCommand("vol_down") },
                             icon = Icons.Default.Remove,
                             size = 52.dp
                         )
@@ -175,11 +192,11 @@ fun TvRemoteScreen(
 
                     // NavigationPad: componentul cu 5 butoane directionale (sus/jos/stanga/dreapta/ok)
                     NavigationPad(
-                        onUp = { viewModel.sendCommand("up") },
-                        onDown = { viewModel.sendCommand("down") },
-                        onLeft = { viewModel.sendCommand("left") },
-                        onRight = { viewModel.sendCommand("right") },
-                        onCenter = { viewModel.sendCommand("ok") }
+                        onUp = { onSendCommand("up") },
+                        onDown = { onSendCommand("down") },
+                        onLeft = { onSendCommand("left") },
+                        onRight = { onSendCommand("right") },
+                        onCenter = { onSendCommand("ok") }
                     )
 
                     // Coloana canale: buton canal urmator, buton sursa de intrare, buton canal anterior
@@ -189,17 +206,17 @@ fun TvRemoteScreen(
                     ) {
                         Text("CH", color = OnSurface, style = MaterialTheme.typography.labelMedium)
                         RemoteButton(
-                            onClick = { viewModel.sendCommand("ch_up") },
+                            onClick = { onSendCommand("ch_up") },
                             icon = Icons.Default.KeyboardArrowUp,
                             size = 52.dp
                         )
                         RemoteButton(
-                            onClick = { viewModel.sendCommand("source") },
+                            onClick = { onSendCommand("source") },
                             icon = Icons.Default.Input,
                             size = 52.dp
                         )
                         RemoteButton(
-                            onClick = { viewModel.sendCommand("ch_down") },
+                            onClick = { onSendCommand("ch_down") },
                             icon = Icons.Default.KeyboardArrowDown,
                             size = 52.dp
                         )
@@ -213,46 +230,71 @@ fun TvRemoteScreen(
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     RemoteButton(
-                        onClick = { viewModel.sendCommand("menu") },
+                        onClick = { onSendCommand("menu") },
                         label = "MENU",
                         size = 64.dp,
                         cornerRadius = 16.dp
                     )
                     RemoteButton(
-                        onClick = { viewModel.sendCommand("home") },
+                        onClick = { onSendCommand("home") },
                         icon = Icons.Default.Home,
                         size = 64.dp,
                         cornerRadius = 16.dp
                     )
                     RemoteButton(
-                        onClick = { viewModel.sendCommand("back") },
+                        onClick = { onSendCommand("back") },
                         label = "BACK",
                         size = 64.dp,
                         cornerRadius = 16.dp
                     )
                 }
 
-                // ── Learn New Button ──────────────────────────────────────────
-                // Buton pentru invatarea de noi comenzi IR (functionalitate viitoare)
-                HorizontalDivider(color = Outline, modifier = Modifier.padding(vertical = 4.dp))
-                Button(
-                    onClick = { },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariant)
-                ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = null,
-                        tint = Primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Learn New Command", color = Primary, fontWeight = FontWeight.SemiBold)
-                }
-
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
+    }
+}
+
+private val previewTvDevice = DeviceResponse(
+    id = 4,
+    name = "Living Room TV",
+    device_type = "ir_tv",
+    room = "Living Room",
+    room_id = 1,
+    mqtt_topic = null,
+    is_online = true,
+    last_status = "on",
+    mac_address = null,
+    ir_codes = null,
+    ir_remote_type = "44-key",
+    owner_id = 1,
+    created_at = "2026-01-01T00:00:00"
+)
+
+@Preview(showBackground = true)
+@Composable
+fun TvRemoteScreenOnPreview() {
+    SmartHomeTheme {
+        TvRemoteScreenContent(
+            device = previewTvDevice,
+            isOn = true,
+            isMuted = false,
+            onBack = {},
+            onSendCommand = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun TvRemoteScreenOffPreview() {
+    SmartHomeTheme {
+        TvRemoteScreenContent(
+            device = previewTvDevice.copy(is_online = false, last_status = "off"),
+            isOn = false,
+            isMuted = true,
+            onBack = {},
+            onSendCommand = {}
+        )
     }
 }

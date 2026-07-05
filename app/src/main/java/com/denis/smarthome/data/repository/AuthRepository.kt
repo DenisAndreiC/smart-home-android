@@ -12,9 +12,17 @@ package com.denis.smarthome.data.repository
 
 import com.denis.smarthome.data.api.ApiService
 import com.denis.smarthome.data.local.TokenManager
+import com.denis.smarthome.data.model.ChangePasswordRequest
+import com.denis.smarthome.data.model.ForgotPasswordRequest
 import com.denis.smarthome.data.model.LoginRequest
+import com.denis.smarthome.data.model.MessageResponse
 import com.denis.smarthome.data.model.RegisterRequest
+import com.denis.smarthome.data.model.UpdateUserRequest
 import com.denis.smarthome.data.model.UserResponse
+import okhttp3.MultipartBody
+import org.json.JSONArray
+import org.json.JSONObject
+import retrofit2.HttpException
 
 /**
  * Repository care expune operatiile de autentificare catre stratul ViewModel.
@@ -45,33 +53,72 @@ class AuthRepository(
      * @return Result.success(token) daca autentificarea a reusit,
      *         Result.failure(exceptie) in caz de credentiale invalide sau eroare de retea
      */
-    suspend fun login(email: String, password: String): Result<String> = runCatching {
-        // "username" este numele campului standard OAuth2, dar valoarea este adresa de email
-        val response = apiService.login(LoginRequest(email = email, password = password))
-        // Salveaza token-ul imediat dupa autentificare — va fi citit de AuthInterceptor la urmatoarele request-uri
-        tokenManager.saveToken(response.access_token)
-        response.access_token
+    suspend fun login(email: String, password: String): Result<String> {
+        return try {
+            val response = apiService.login(LoginRequest(email = email, password = password))
+            tokenManager.saveToken(response.access_token)
+            Result.success(response.access_token)
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseHttpError(e)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     /**
      * Inregistreaza un utilizator nou si il autentifica imediat.
      *
      * Apeleaza POST /auth/register cu JSON body (nu form-encoded ca login).
-     * Backend-ul creeaza contul si returneaza direct un token JWT — nu e nevoie
-     * de un pas separat de login dupa inregistrare.
+     * Backend-ul returneaza UserResponse la register, deci facem login automat dupa.
+     * Prinde erorile HTTP (400 email duplicat, 422 validare) si expune mesajul real.
      *
-     * @param name numele complet al utilizatorului
+     * @param name username-ul utilizatorului
      * @param email adresa de email unica pentru cont
-     * @param password parola aleasa de utilizator
+     * @param password parola aleasa de utilizator (min 6 caractere)
      * @return Result.success(token) daca inregistrarea a reusit,
      *         Result.failure(exceptie) daca email-ul exista deja sau alta eroare
      */
-    suspend fun register(name: String, email: String, password: String): Result<String> = runCatching {
-        // Backend-ul returneaza UserResponse la register (nu token), deci facem login automat dupa
-        apiService.register(RegisterRequest(username = name, email = email, password = password))
-        val tokenResponse = apiService.login(LoginRequest(email = email, password = password))
-        tokenManager.saveToken(tokenResponse.access_token)
-        tokenResponse.access_token
+    suspend fun register(name: String, email: String, password: String): Result<String> {
+        return try {
+            // Daca register esueaza cu HTTP 400/422, aruncam exceptie cu mesajul real
+            apiService.register(RegisterRequest(username = name, email = email, password = password))
+            val tokenResponse = apiService.login(LoginRequest(email = email, password = password))
+            tokenManager.saveToken(tokenResponse.access_token)
+            Result.success(tokenResponse.access_token)
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseHttpError(e)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Extrage mesajul de eroare real din body-ul HTTP returnat de FastAPI.
+     *
+     * FastAPI returneaza erori in format:
+     *   {"detail": "Email-ul este deja inregistrat"}  — eroare simpla (string)
+     *   {"detail": [{"msg": "..."}, ...]}              — eroare de validare (lista)
+     *
+     * @param e exceptia HTTP de la Retrofit
+     * @return mesajul de eroare lizibil pentru utilizator
+     */
+    private fun parseHttpError(e: HttpException): String {
+        return try {
+            val errorBody = e.response()?.errorBody()?.string() ?: return e.message()
+            val json = JSONObject(errorBody)
+            val detail = json.opt("detail")
+            when (detail) {
+                is String -> detail
+                is JSONArray -> {
+                    // Eroare de validare Pydantic — extragem primul mesaj
+                    val first = detail.optJSONObject(0)
+                    first?.optString("msg") ?: e.message()
+                }
+                else -> e.message()
+            }
+        } catch (_: Exception) {
+            e.message()
+        }
     }
 
     /**
@@ -97,5 +144,45 @@ class AuthRepository(
     suspend fun logout() {
         // Sterge token-ul din DataStore — urmatoarele request-uri vor fi neautentificate
         tokenManager.clearToken()
+    }
+
+    suspend fun updateUser(displayName: String): Result<UserResponse> = runCatching {
+        apiService.updateUser(UpdateUserRequest(displayName))
+    }
+
+    suspend fun uploadAvatar(part: MultipartBody.Part): Result<UserResponse> = runCatching {
+        apiService.uploadAvatar(part)
+    }
+
+    suspend fun requestPasswordChangeCode(): Result<MessageResponse> {
+        return try {
+            Result.success(apiService.requestPasswordChangeCode())
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseHttpError(e)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun changePassword(
+        currentPassword: String? = null,
+        emailCode: String? = null,
+        newPassword: String
+    ): Result<MessageResponse> {
+        return try {
+            Result.success(apiService.changePassword(ChangePasswordRequest(
+                current_password = currentPassword,
+                email_code       = emailCode,
+                new_password     = newPassword
+            )))
+        } catch (e: HttpException) {
+            Result.failure(Exception(parseHttpError(e)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun forgotPassword(email: String): Result<MessageResponse> = runCatching {
+        apiService.forgotPassword(ForgotPasswordRequest(email))
     }
 }

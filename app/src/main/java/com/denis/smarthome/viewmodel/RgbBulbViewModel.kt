@@ -1,10 +1,20 @@
 /**
- * RgbBulbViewModel.kt - ViewModel pentru controlul becului RGB inteligent
+ * RgbBulbViewModel.kt - ViewModel pentru controlul becului RGB cu telecomanda IR
  *
- * Gestioneaza starea becului RGB: pornit/oprit, luminozitate, culoare selectata
- * si preseturile de culoare. Culoarea poate fi aleasa de pe o roata de culori
- * (ColorWheel composable) sau dintr-o lista de preseturi predefinite.
- * Culoarea este trimisa catre API in format hex (#RRGGBB).
+ * Gestioneaza starea becului RGB controlat prin infrarosu: luminozitate (step up/down)
+ * si culoare discreta (red, green, blue etc.). Nu exista buton on/off separat — starea
+ * "isOn" reflecta doar daca becul are alimentare (vezi [loadDevice]).
+ *
+ * IMPORTANT: Becul RGB este non-smart, controlat prin telecomanda IR (NEC protocol).
+ * Nu suporta culori hex arbitrare sau procente de luminozitate.
+ * Comenzile disponibile corespund butoanelor fizice de pe telecomanda 44-key / 24-key,
+ * dar etichetate/remapate in UI dupa efectul real observat, nu dupa eticheta originala
+ * (butoanele fizice on/off si brightness_up sunt inversate fata de eticheta lor):
+ * - Culori fixe: red, green, blue
+ * - Joc de lumini: warm_white (codul captureaza de fapt o ciclare de culori)
+ * - Luminozitate mai tare: codul fizic "power"/"on" (fostul on/off, care chiar creste)
+ * - Luminozitate mai slaba: codul fizic "brightness_up"/"up" (fostul "Brighter", care de fapt scade)
+ * - Efect Ice: flash (alb-albastru pulsat)
  *
  * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
  * Autor: Denis Andrei C.
@@ -26,51 +36,48 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Model pentru un preset de culoare predefinit.
+ * Model pentru un buton de culoare IR predefinit.
  *
- * Fiecare preset contine culoarea Compose, numele afisat si unghiul pe roata de culori.
- * Unghiul ([angle]) este folosit pentru a pozitiona indicatorul pe ColorWheel
- * atunci cand utilizatorul selecteaza un preset, sincronizand vizual roata cu alegerea.
+ * Fiecare buton corespunde unui buton fizic de pe telecomanda IR a becului RGB.
+ * [irCommand] este comanda exacta trimisa catre ESP32 prin MQTT.
  *
- * @param name numele presetului afisat in UI (ex: "Warm", "Cool")
- * @param color culoarea Compose corespunzatoare
- * @param angle unghiul in grade pe roata de culori (0-360)
+ * @param name numele afisat in UI (ex: "Red", "Warm White")
+ * @param color culoarea Compose pentru preview vizual in UI
+ * @param irCommand comanda IR trimisa catre ESP32 (ex: "red", "warm_white")
  */
-data class ColorPreset(
+data class IrColorButton(
     val name: String,
     val color: Color,
-    val angle: Float
+    val irCommand: String
 )
 
 /**
- * Lista de preseturi de culoare predefinite cu unghiurile corespunzatoare pe roata de culori.
+ * Lista de culori disponibile pe telecomanda IR a becului RGB.
+ * Aceste culori sunt comune atat telecomenzilor 44-key cat si 24-key.
+ * Fiecare intrare mapeaza direct la o comanda IR acceptata de firmware-ul ESP32.
  *
- * Unghiurile sunt aproximative, bazate pe pozitia culorilor in modelul HSV:
- * - Warm (galben auriu): ~50 grade
- * - Cool (alb-albastru rece): ~215 grade
- * - Red (rosu pur): 0 grade (inceputul cercului)
- * - Blue (albastru pur): ~240 grade
- * - Green (verde pur): ~120 grade
- * - Purple (mov): ~290 grade
+ * NOTA: comenzile "warm_white" si "cool_white" nu declanseaza de fapt alb cald/rece pe
+ * becul fizic — codul capturat pe acest buton porneste un joc de lumini (color cycling).
+ * Etichetam butonul dupa efectul real ("Joc de lumini") si pastram un singur buton
+ * pentru acest efect (eliminam duplicatul "Cool White", care produce acelasi rezultat).
  */
-val rgbPresets = listOf(
-    ColorPreset("Warm",   Color(0xFFFFD700), 50f),
-    ColorPreset("Cool",   Color(0xFFE0E8FF), 215f),
-    ColorPreset("Red",    Color(0xFFFF0000), 0f),
-    ColorPreset("Blue",   Color(0xFF0000FF), 240f),
-    ColorPreset("Green",  Color(0xFF00FF00), 120f),
-    ColorPreset("Purple", Color(0xFF9C27B0), 290f)
+val rgbIrColors = listOf(
+    IrColorButton("Red",           Color(0xFFFF0000), "red"),
+    IrColorButton("Green",         Color(0xFF00FF00), "green"),
+    IrColorButton("Blue",          Color(0xFF0000FF), "blue"),
+    IrColorButton("Joc de lumini", Color(0xFFFFD700), "warm_white")
 )
 
 /**
- * ViewModel pentru ecranul de control al becului RGB.
+ * ViewModel pentru ecranul de control al becului RGB prin IR.
  *
- * Ofera doua modalitati de selectare a culorii:
- * 1. Roata de culori (ColorWheel composable) — apeleaza [setColorFromWheel]
- * 2. Preseturi predefinite din [rgbPresets] — apeleaza [selectPreset]
+ * Spre deosebire de un bec smart (WiFi/Bluetooth), becul IR are control limitat:
+ * - Culori: doar cele disponibile pe telecomanda (5-20 culori fixe)
+ * - Luminozitate: doar step up / step down (fara slider procentual, fara on/off manual)
+ * - Efecte: Ice (disponibil pe 44-key si 24-key)
  *
- * [selectedAngle] sincronizeaza pozitia indicatorului pe roata de culori cu culoarea
- * selectata, indiferent daca a fost aleasa din preset sau direct de pe roata.
+ * Toate comenzile sunt trimise ca action + value catre backend,
+ * care le mapeaza la comanda IR corecta prin MQTT → ESP32 → IR LED → bec.
  *
  * @param application contextul aplicatiei
  * @param deviceId ID-ul becului RGB din sistemul SmartHome
@@ -85,30 +92,18 @@ class RgbBulbViewModel(
     private val _device = MutableStateFlow<DeviceResponse?>(null)
     val device: StateFlow<DeviceResponse?> = _device.asStateFlow()
 
-    // Starea de pornit/oprit sincronizata cu is_active din API la incarcare
+    // Starea de "are alimentare" a becului — nu exista toggle manual, e derivata din
+    // starea releelor/conectivitatea ESP32 in loadDevice()
     private val _isOn = MutableStateFlow(false)
     val isOn: StateFlow<Boolean> = _isOn.asStateFlow()
 
-    // Luminozitate procentuala (0-100), initiata la 85%
-    private val _brightness = MutableStateFlow(85)
-    val brightness: StateFlow<Int> = _brightness.asStateFlow()
-
-    // Culoarea curenta selectata, initiata la culoarea primara a aplicatiei (teal)
-    private val _selectedColor = MutableStateFlow(Color(0xFF00BCD4))
+    // Culoarea curenta selectata — reflecta ultima culoare IR trimisa
+    private val _selectedColor = MutableStateFlow(Color(0xFFFF0000))
     val selectedColor: StateFlow<Color> = _selectedColor.asStateFlow()
 
-    /**
-     * Unghiul curent al indicatorului pe roata de culori.
-     *
-     * Actualizat atat la selectia directa de pe roata cat si la selectia unui preset,
-     * asigurand sincronizarea vizuala intre cele doua metode de alegere a culorii.
-     */
-    private val _selectedAngle = MutableStateFlow(185f)
-    val selectedAngle: StateFlow<Float> = _selectedAngle.asStateFlow()
-
-    // Numele presetului activ sau null daca culoarea a fost aleasa liber de pe roata
-    private val _selectedPreset = MutableStateFlow<String?>(null)
-    val selectedPreset: StateFlow<String?> = _selectedPreset.asStateFlow()
+    // Numele culorii active (comanda IR) — folosit pentru highlight in UI
+    private val _activeColorCommand = MutableStateFlow("red")
+    val activeColorCommand: StateFlow<String> = _activeColorCommand.asStateFlow()
 
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -127,8 +122,13 @@ class RgbBulbViewModel(
             repository.getDevices()
                 .onSuccess { devices ->
                     _device.value = devices.find { it.id == deviceId }
-                    // Sincronizam starea locala cu starea reala din API
-                    _isOn.value = _device.value?.is_active ?: false
+                    // Becul IR e alimentat din acelasi circuit ca releele de lumina din casa:
+                    // daca orice releu e pornit, inseamna ca becul are alimentare si e considerat ON,
+                    // indiferent de is_online-ul propriu (care reflecta doar conectivitatea ESP32).
+                    val anyRelayOn = devices.any {
+                        it.device_type.lowercase() == "relay" && it.last_status?.lowercase() == "on"
+                    }
+                    _isOn.value = anyRelayOn || (_device.value?.is_online ?: false)
                 }
                 .onFailure { _error.value = it.message }
             _isLoading.value = false
@@ -136,90 +136,77 @@ class RgbBulbViewModel(
     }
 
     /**
-     * Comuta starea de pornit/oprit a becului si trimite comanda API.
+     * Trimite comanda IR pentru o culoare specifica.
+     * Actualizeaza starea locala (culoarea selectata si comanda activa).
+     *
+     * @param irColor butonul de culoare IR selectat din lista [rgbIrColors]
      */
-    fun togglePower() {
-        _isOn.value = !_isOn.value
-        sendCommand("power", if (_isOn.value) "on" else "off")
+    fun selectColor(irColor: IrColorButton) {
+        _selectedColor.value = irColor.color
+        _activeColorCommand.value = irColor.irCommand
+        sendCommand("color", irColor.irCommand)
     }
 
     /**
-     * Seteaza luminozitatea becului (0-100) si trimite comanda API.
+     * Creste luminozitatea cu un pas.
      *
-     * @param value valoarea luminozitatii in procente
+     * NOTA: butoanele fizice de pe telecomanda nu corespund etichetelor lor — codul
+     * "power"/"on" (fostul buton on/off) este cel care chiar creste luminozitatea,
+     * nu codul "brightness_up" (care de fapt scade). Remapam butonul "Lumina mai tare"
+     * sa trimita codul corect, desi comanda transmisa e in continuare "power"/"on".
      */
-    fun setBrightness(value: Int) {
-        _brightness.value = value
-        sendCommand("set_brightness", "$value")
+    fun brightnessUp() {
+        sendCommand("power", "on")
     }
 
     /**
-     * Actualizeaza culoarea din selectia directa pe roata de culori.
+     * Scade luminozitatea cu un pas.
      *
-     * Primeste culoarea si unghiul de la composable-ul ColorWheel.
-     * Reseteaza presetul activ, deoarece utilizatorul a ales o culoare personalizata.
-     *
-     * @param color culoarea selectata pe roata
-     * @param angle unghiul corespunzator pe roata (0-360 grade)
+     * NOTA: codul "brightness_up"/"up" (fostul buton "Brighter") e cel care de fapt
+     * scade luminozitatea, deci butonul "Lumina mai slaba" il foloseste acum.
+     * Vechiul cod "brightness_down"/"down" a ramas orfan (efect neclar/inversat) si
+     * nu mai e trimis din UI.
      */
-    fun setColorFromWheel(color: Color, angle: Float) {
-        _selectedColor.value = color
-        _selectedAngle.value = angle
-        // Deselectam presetul activ cand utilizatorul alege manual de pe roata
-        _selectedPreset.value = null
-        sendColorCommand(color)
+    fun brightnessDown() {
+        sendCommand("brightness_up", "up")
     }
 
     /**
-     * Aplica un preset de culoare predefinit.
-     *
-     * Actualizeaza culoarea, unghiul roatei si marcheaza presetul ca activ.
-     *
-     * @param preset presetul selectat din [rgbPresets]
+     * Trimite comanda IR pentru modul "Ice" (alb-albastru pulsat).
+     * Foloseste codul IR de la butonul fizic "Flash" — cel de la "Fade" (albastru deschis
+     * static) a fost eliminat pentru a nu avea doua butoane pentru efecte similare.
      */
-    fun selectPreset(preset: ColorPreset) {
-        _selectedColor.value = preset.color
-        // Pozitionam indicatorul roatei la unghiul corespunzator presetului
-        _selectedAngle.value = preset.angle
-        _selectedPreset.value = preset.name
-        sendColorCommand(preset.color)
-    }
-
-    /**
-     * Converteste o culoare Compose la format hex si trimite comanda set_color.
-     *
-     * Conversia: extrage componentele RGB (0.0-1.0), le inmulteste cu 255,
-     * le converteste la Int si le formateaza ca hex cu 2 cifre (#RRGGBB).
-     * Formatul hex este cerut de API-ul backend pentru controlul LED-urilor RGB.
-     *
-     * @param color culoarea Compose de convertit si trimis
-     */
-    private fun sendColorCommand(color: Color) {
-        // Formatul #RRGGBB: fiecare componenta normalizata (0.0-1.0) inmultita cu 255
-        val hex = "#%02X%02X%02X".format(
-            (color.red * 255).toInt(),
-            (color.green * 255).toInt(),
-            (color.blue * 255).toInt()
-        )
-        sendCommand("set_color", hex)
+    fun effectIce() {
+        sendCommand("flash", "flash")
     }
 
     /**
      * Trimite o comanda catre becul RGB prin repository.
      *
-     * @param type tipul comenzii (ex: "power", "set_color", "set_brightness")
-     * @param data valoarea comenzii (ex: "on", "#FF0000", "85")
+     * @param type tipul comenzii (ex: "power", "color", "brightness_up")
+     * @param data valoarea comenzii (ex: "on", "red", "up")
      */
     private fun sendCommand(type: String, data: String) {
         viewModelScope.launch {
             repository.sendCommand(
-                CommandRequest(device_id = deviceId, command_type = type, command_data = data)
+                CommandRequest(device_id = deviceId, action = type, value = data)
             ).onFailure { _error.value = it.message }
         }
     }
 
     /** Sterge mesajul de eroare curent. */
     fun clearError() { _error.value = null }
+
+    private val _isDeleted = MutableStateFlow(false)
+    val isDeleted: StateFlow<Boolean> = _isDeleted.asStateFlow()
+
+    fun deleteDevice() {
+        viewModelScope.launch {
+            repository.deleteDevice(deviceId)
+                .onSuccess { _isDeleted.value = true }
+                .onFailure { _error.value = it.message }
+        }
+    }
 
     /**
      * Factory pentru injectarea [deviceId] fara framework DI.

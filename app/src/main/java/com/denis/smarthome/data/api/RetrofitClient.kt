@@ -1,12 +1,12 @@
 /**
- * RetrofitClient.kt - Singleton pentru configurarea clientului HTTP Retrofit
+ * RetrofitClient.kt - Singleton for configuring the Retrofit HTTP client.
  *
- * Configureaza instanta unica Retrofit folosita in toata aplicatia.
- * Include AuthInterceptor care ataseaza automat token-ul JWT la fiecare request HTTP,
- * si HttpLoggingInterceptor pentru debug-ul traficului de retea.
+ * Holds the single Retrofit instance used across the entire app.
+ * Includes an AuthInterceptor that automatically attaches the JWT token to
+ * every HTTP request, and an HttpLoggingInterceptor for network debug logging.
  *
- * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
- * Autor: Denis Andrei C.
+ * Project: SmartHome IoT - Licenta CSIE-ASE 2025
+ * Author: Denis Andrei C.
  */
 package com.denis.smarthome.data.api
 
@@ -21,27 +21,37 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 /**
- * Singleton Kotlin (object) care detine si expune instanta unica de [ApiService].
+ * Kotlin singleton (object) that holds and exposes the single [ApiService] instance.
  *
- * Pattern Singleton: `object` in Kotlin garanteaza o singura instanta pe durata
- * intregii aplicatii. Trebuie initializat o data, prin apelul [init], inainte de
- * primul acces la [apiService]. Initializarea se face in MainActivity.
+ * Singleton pattern: `object` in Kotlin guarantees one instance for the entire app
+ * lifetime. Must be initialized once via [init] before the first [apiService] access.
+ * Initialization happens in MainActivity.
  *
- * Design decision: nu se foloseste un framework DI (ex: Hilt/Dagger) pentru a
- * pastra proiectul simplu — Singleton manual este suficient pentru aceasta scara.
+ * Design decision: no DI framework (e.g. Hilt/Dagger) is used to keep the project
+ * simple — a manual singleton is sufficient at this scale.
  */
 object RetrofitClient {
 
-    // BASE_URL specifica adresa backend-ului FastAPI.
-    // 10.0.2.2 este adresa speciala folosita in emulatorul Android pentru a
-    // accesa localhost-ul masinii gazda (Mac/PC de dezvoltare).
-    // Pe un dispozitiv fizic, ar trebui inlocuita cu IP-ul real al masinii
-    // (ex: "http://192.168.1.100:8000/") sau un DNS dinamic.
+    // BASE_URL points to the FastAPI backend.
+    // 10.0.2.2 is the special loopback alias used in the Android Emulator to
+    // reach localhost on the host machine (Mac/PC).
+    // On a physical device, replace with the machine's real local IP
+    // (e.g. "http://192.168.1.100:8000/") or a dynamic DNS.
     // Use "http://10.0.2.2:8000/" for Android Emulator
     // Use "http://192.168.x.x:8000/" for physical device (replace with your Mac's IP)
-    const val BASE_URL = "http://10.0.2.2:8000/api/"
+    const val EMULATOR_URL = "http://10.0.2.2:8000/api/"
+    const val DEVICE_URL = "http://91.98.118.24:8000/api/"
+    var BASE_URL = DEVICE_URL
+        private set
 
-    // tokenManager si _apiService sunt null pana la apelul init()
+    /**
+     * Radacina serverului (fara sufixul "api/"), folosita pentru a construi URL-uri
+     * complete catre resurse statice servite direct de FastAPI (ex: avatare de profil
+     * din /static/avatars/...), care nu sunt sub prefixul /api/.
+     */
+    val rootUrl: String
+        get() = BASE_URL.removeSuffix("api/").trimEnd('/')
+
     private var tokenManager: TokenManager? = null
     private var _apiService: ApiService? = null
 
@@ -58,59 +68,78 @@ object RetrofitClient {
     }
 
     /**
-     * Proprietate care expune instanta [ApiService] gata de utilizare.
-     * Arunca exceptie daca [init] nu a fost apelat anterior — fail-fast design.
+     * Exposes the ready-to-use [ApiService] instance.
+     * Throws if [init] was not called first — fail-fast design.
      */
     val apiService: ApiService
         get() = _apiService ?: error("RetrofitClient not initialized. Call RetrofitClient.init() first.")
 
     /**
-     * Construieste si configureaza instanta [ApiService] cu OkHttpClient personalizat.
-     * Metoda privata — apelata o singura data din [init].
+     * Switches the backend URL and rebuilds Retrofit.
+     * Useful for toggling between the emulator (10.0.2.2) and a physical device (LAN IP).
+     */
+    fun updateBaseUrl(url: String) {
+        BASE_URL = url
+        tokenManager?.let { _apiService = buildApiService(it) }
+    }
+
+    /**
+     * Builds and configures the [ApiService] instance with a custom OkHttpClient.
+     * Private — called once from [init].
      *
-     * @param tokenManager folosit de AuthInterceptor pentru a prelua token-ul curent
-     * @return instanta configurata de [ApiService]
+     * @param tokenManager used by the auth interceptor to read the current JWT token
+     * @return configured [ApiService] instance
      */
     private fun buildApiService(tokenManager: TokenManager): ApiService {
-        // Interceptor de logging — afiseaza in Logcat toate request-urile si response-urile HTTP.
-        // Level.BODY include header-ele si body-ul complet, util pentru debug.
-        // In productie, nivelul ar trebui redus la NONE sau BASIC.
+        // Logging interceptor — prints all requests and responses to Logcat.
+        // Level.BODY includes full headers and body, useful during development.
+        // In production this should be reduced to NONE or BASIC.
         val loggingInterceptor = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
 
-        // AuthInterceptor — adauga automat header-ul "Authorization: Bearer <token>"
-        // la FIECARE request HTTP trimis prin acest client.
-        // runBlocking este necesar deoarece Interceptor.intercept() nu este o functie
-        // suspendata, dar getToken() returneaza un Flow (asincron).
-        // firstOrNull() colecteaza primul (si singurul) token emis din DataStore.
-        // Daca token-ul este null (utilizator neautentificat), header-ul nu se adauga
-        // si server-ul va returna 401 Unauthorized pentru endpoint-urile protejate.
+        // Auth interceptor — automatically attaches "Authorization: Bearer <token>"
+        // to every outgoing HTTP request.
+        // runBlocking is required because Interceptor.intercept() is not a suspend
+        // function, but getToken() returns a Flow. firstOrNull() collects the first
+        // (and only) value emitted by DataStore.
+        // If the token is null (user not authenticated), the header is not added and
+        // the server will respond with 401 for protected endpoints.
         val authInterceptor = Interceptor { chain ->
-            // Citire sincrona a token-ului din DataStore — necesara in contextul non-corutina
             val token = runBlocking { tokenManager.getToken().firstOrNull() }
             val request = chain.request().newBuilder().apply {
-                // Adauga header-ul doar daca token-ul exista
                 token?.let { header("Authorization", "Bearer $it") }
             }.build()
             chain.proceed(request)
         }
 
-        // Construieste OkHttpClient cu cei doi interceptori si timeout-uri de 30 secunde.
-        // Ordinea interceptorilor conteaza: authInterceptor se executa inaintea loggingInterceptor,
-        // astfel header-ul Authorization va fi vizibil in log-uri.
+        // Response interceptor: clears the saved JWT token when the server returns 401.
+        // This ensures the app does not keep a stale/expired token in DataStore.
+        // On the next app launch the startup check will redirect to Login automatically.
+        val authErrorInterceptor = Interceptor { chain ->
+            val response = chain.proceed(chain.request())
+            if (response.code == 401) {
+                runBlocking { tokenManager.clearToken() }
+            }
+            response
+        }
+
+        // Build OkHttpClient with interceptors and 30-second timeouts.
+        // Order matters: authInterceptor runs first so the Authorization header
+        // is visible in the logging interceptor output.
         val client = OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
+            .addInterceptor(authErrorInterceptor)
             .addInterceptor(loggingInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
 
-        // Construieste instanta Retrofit cu:
-        // - BASE_URL: adresa backend-ului
-        // - GsonConverterFactory: serializeaza/deserializeaza automat JSON <-> data class
-        // - client OkHttp personalizat cu interceptorii configurati mai sus
+        // Build the Retrofit instance with:
+        // - BASE_URL: backend address (can be changed at runtime via updateBaseUrl)
+        // - GsonConverterFactory: auto-serializes/deserializes JSON <-> data classes
+        // - custom OkHttp client with the interceptors configured above
         return Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(client)

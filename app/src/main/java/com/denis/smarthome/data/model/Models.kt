@@ -1,25 +1,9 @@
-/**
- * Models.kt - Data class-urile pentru serializarea/deserializarea JSON cu backend-ul
- *
- * Contine toate modelele de date folosite la comunicarea prin API REST.
- * Modelele sunt grupate in 5 categorii: Auth, Devices, Commands, Scenes, Dashboard.
- * @SerializedName este folosit pentru a mapa campurile cu snake_case din JSON
- * la proprietati Kotlin cu camelCase sau snake_case explicit.
- *
- * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
- * Autor: Denis Andrei C.
- */
 package com.denis.smarthome.data.model
 
 import com.google.gson.annotations.SerializedName
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
-/**
- * Request body pentru endpoint-ul POST /auth/register.
- * Trimis ca JSON (nu form-encoded) — diferit de login.
- * Campurile nu necesita @SerializedName deoarece numele Kotlin coincide cu JSON-ul asteptat.
- */
 data class RegisterRequest(
     val username: String,
     val email: String,
@@ -31,178 +15,254 @@ data class LoginRequest(
     val password: String
 )
 
-/**
- * Response primit de la server dupa login sau register cu succes.
- * Contine token-ul JWT care va fi stocat in DataStore prin TokenManager.
- *
- * @SerializedName("access_token") mapeaza campul "access_token" din JSON
- * (snake_case, standard OAuth2) la proprietatea Kotlin. Backend-ul FastAPI
- * foloseste snake_case conform conventiei Python/OAuth2.
- */
 data class TokenResponse(
-    // "access_token" in JSON (OAuth2 standard) -> accesat in Kotlin ca access_token
     @SerializedName("access_token") val access_token: String,
-    // Tipul token-ului, de obicei "bearer" — folosit in header-ul Authorization
-    @SerializedName("token_type") val token_type: String
+    @SerializedName("token_type")   val token_type: String
 )
 
-/**
- * Response cu datele profilului utilizatorului autentificat.
- * Returnat de GET /auth/me — endpoint protejat cu JWT.
- */
 data class UserResponse(
     val id: Int,
     val username: String,
     val email: String,
-    // Data si ora crearii contului, serializata ca string ISO 8601 de catre FastAPI
+    @SerializedName("display_name")  val display_name: String?,
+    @SerializedName("avatar_url")    val avatar_url: String?,
+    @SerializedName("created_at")    val created_at: String,
+    @SerializedName("is_verified")   val is_verified: Boolean = false
+)
+
+// ── Rooms ─────────────────────────────────────────────────────────────────────
+
+data class RoomRequest(val name: String)
+
+data class RoomResponse(
+    val id: Int,
+    val name: String,
+    @SerializedName("owner_id")   val owner_id: Int,
     @SerializedName("created_at") val created_at: String
 )
 
 // ── Devices ───────────────────────────────────────────────────────────────────
 
-/**
- * Request body pentru crearea sau actualizarea unui dispozitiv.
- * Folosit la POST /devices si PUT /devices/{id}.
- * Campurile snake_case sunt necesare pentru a corespunde schemei Pydantic din backend.
- */
 data class DeviceRequest(
     val name: String,
-    // Tipul dispozitivului (ex: "ac", "tv", "light") — determina comenzile disponibile
-    @SerializedName("device_type") val device_type: String,
-    // Camera in care se afla dispozitivul (ex: "Living", "Dormitor")
-    val room: String,
-    // Protocol IR optional (ex: "NEC", "SAMSUNG") — null pentru dispozitive doar MQTT
-    @SerializedName("ir_protocol") val ir_protocol: String? = null,
-    // Topic-ul MQTT pe care backend-ul publica comenzile pentru acest dispozitiv
-    @SerializedName("mqtt_topic") val mqtt_topic: String
+    @SerializedName("device_type")     val device_type: String,
+    val room: String? = null,
+    @SerializedName("mqtt_topic")      val mqtt_topic: String? = null,
+    @SerializedName("ir_codes")        val ir_codes: Map<String, String>? = null,
+    @SerializedName("ir_remote_type")  val ir_remote_type: String? = null
 )
 
-/**
- * Response cu datele complete ale unui dispozitiv, asa cum sunt stocate in baza de date.
- * Returnat de GET /devices (lista) si POST/PUT /devices (dupa creare/actualizare).
- */
 data class DeviceResponse(
-    // Id-ul unic generat de server (auto-increment in baza de date)
     val id: Int,
     val name: String,
-    @SerializedName("device_type") val device_type: String,
-    val room: String,
-    @SerializedName("ir_protocol") val ir_protocol: String?,
-    @SerializedName("mqtt_topic") val mqtt_topic: String,
-    // Indica daca dispozitivul este online/activ in momentul interogarii
-    @SerializedName("is_active") val is_active: Boolean,
-    @SerializedName("created_at") val created_at: String
+    @SerializedName("device_type")  val device_type: String,
+    val room: String?,
+    @SerializedName("room_id")      val room_id: Int?,
+    @SerializedName("mqtt_topic")   val mqtt_topic: String?,
+    @SerializedName("is_online")    val is_online: Boolean,
+    @SerializedName("last_status")  val last_status: String?,
+    @SerializedName("mac_address")  val mac_address: String?,
+    @SerializedName("ir_codes")        val ir_codes: String?,
+    @SerializedName("ir_remote_type")  val ir_remote_type: String?,
+    @SerializedName("owner_id")        val owner_id: Int,
+    @SerializedName("created_at")   val created_at: String
 )
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
-/**
- * Request body pentru trimiterea unei comenzi catre un dispozitiv.
- * Folosit la POST /commands/send.
- * Backend-ul determina canalul de comunicare (MQTT sau IR) in functie de tipul dispozitivului.
- */
 data class CommandRequest(
-    // Id-ul dispozitivului destinatar al comenzii
     @SerializedName("device_id") val device_id: Int,
-    // Tipul comenzii (ex: "ON", "OFF", "SET_TEMP", "SET_VOLUME")
-    @SerializedName("command_type") val command_type: String,
-    // Date aditionale pentru comanda (ex: "22" pentru temperatura) — optional
-    @SerializedName("command_data") val command_data: String? = null
+    val action: String,
+    val value: String? = null
 )
 
-/**
- * Response primit dupa trimiterea unei comenzi.
- * Confirma ca backend-ul a primit si procesat comanda (nu garanteaza livrarea la dispozitiv).
- */
 data class CommandResponse(
-    // Mesaj descriptiv de la server (ex: "Command sent successfully")
     val message: String,
-    // true daca comanda a fost acceptata de server, false in caz de eroare logica
     val success: Boolean = true
 )
 
-/**
- * Un element din istoricul comenzilor unui dispozitiv.
- * Returnat de GET /commands/history?device_id={id}.
- */
 data class CommandHistoryResponse(
     val id: Int,
-    @SerializedName("device_id") val device_id: Int,
-    @SerializedName("command_type") val command_type: String,
-    @SerializedName("command_data") val command_data: String?,
-    // Timestamp-ul executiei comenzii (format ISO 8601, ex: "2025-03-08T14:30:00")
-    @SerializedName("created_at") val created_at: String
+    @SerializedName("device_id")   val device_id: Int,
+    val action: String,
+    val value: String?,
+    @SerializedName("created_at")  val created_at: String
 )
 
 // ── Scenes ────────────────────────────────────────────────────────────────────
 
-/**
- * O actiune individuala dintr-o scena — o comanda programata pe un dispozitiv.
- * O scena contine o lista ordonata de astfel de actiuni, executate secvential.
- */
 data class SceneAction(
-    // Dispozitivul asupra caruia se aplica aceasta actiune
-    @SerializedName("device_id") val device_id: Int,
-    @SerializedName("command_type") val command_type: String,
-    @SerializedName("command_data") val command_data: String? = null,
-    // Intarzierea in secunde fata de actiunea anterioara — permite scenarii tip "stinge lumina dupa 5 secunde"
+    @SerializedName("device_id")    val device_id: Int,
+    @SerializedName("action")       val command_type: String,
+    @SerializedName("value")        val command_data: String? = null,
     @SerializedName("delay_seconds") val delay_seconds: Int = 0
 )
 
-/**
- * Request body pentru crearea unei scene noi.
- * Folosit la POST /scenes.
- */
 data class SceneRequest(
-    // Numele scenei afisata in UI (ex: "Film", "Buna dimineata")
     val name: String,
-    // Emoji sau identificator de icon pentru afisare in UI — optional
     val icon: String? = null,
-    // Lista de actiuni care compun scena, executate in ordine de server
     val actions: List<SceneAction>
 )
 
-/**
- * Response cu datele complete ale unei scene, inclusiv actiunile sale.
- * Returnat de GET /scenes si POST /scenes.
- */
 data class SceneResponse(
     val id: Int,
     val name: String,
     val icon: String?,
-    // Lista actiunilor scenei — folosita la afisarea detaliilor si la executie
     val actions: List<SceneAction>,
-    // Indica daca scena este activa/disponibila (scena dezactivata nu poate fi executata)
     @SerializedName("is_active") val is_active: Boolean
 )
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-/**
- * Statistici agregate pentru ecranul principal (HomeScreen).
- * Returnat de GET /dashboard/stats — calculat de server in timp real.
- */
 data class DashboardStats(
-    // Numarul total de dispozitive inregistrate de utilizator
-    @SerializedName("total_devices") val total_devices: Int,
-    // Numarul de dispozitive marcate ca active/online in momentul interogarii
-    @SerializedName("active_devices") val active_devices: Int,
-    // Numarul de comenzi trimise in ziua curenta (resetat la miezul noptii)
-    @SerializedName("total_commands_today") val total_commands_today: Int,
-    // Numele dispozitivului cu cele mai multe comenzi — null daca nu exista comenzi
-    @SerializedName("most_used_device") val most_used_device: String?
+    @SerializedName("total_devices")          val total_devices: Int,
+    @SerializedName("total_commands_today")   val total_commands_today: Int,
+    @SerializedName("total_routines_active")  val total_routines_active: Int,
+    @SerializedName("total_scenes")           val total_scenes: Int,
+    @SerializedName("most_used_device")       val most_used_device: String?,
+    @SerializedName("peak_hour")              val peak_hour: Int?,
+    @SerializedName("commands_by_day")        val commands_by_day: List<Map<String, Any>>?,
+    @SerializedName("commands_by_device")     val commands_by_device: List<Map<String, Any>>?,
+    @SerializedName("device_type_distribution") val device_type_distribution: List<Map<String, Any>>?
+)
+
+data class ActivityResponse(
+    val id: Int,
+    @SerializedName("device_name") val device_name: String,
+    val action: String,
+    @SerializedName("created_at")  val created_at: String
+)
+
+// ── Notifications ──────────────────────────────────────────────────────────────
+
+data class NotificationResponse(
+    val id: Int,
+    val message: String,
+    @SerializedName("is_read")    val is_read: Boolean,
+    @SerializedName("created_at") val created_at: String
+)
+
+// ── Users ──────────────────────────────────────────────────────────────────────
+
+data class UpdateUserRequest(
+    @SerializedName("display_name") val display_name: String
+)
+
+data class ChangePasswordRequest(
+    @SerializedName("current_password") val current_password: String? = null,
+    @SerializedName("email_code")       val email_code: String?       = null,
+    @SerializedName("new_password")     val new_password: String
+)
+
+data class ForgotPasswordRequest(
+    val email: String
+)
+
+data class MessageResponse(
+    val message: String
+)
+
+// ── Stats ──────────────────────────────────────────────────────────────────────
+
+data class EnergyStats(
+    @SerializedName("kwh_today") val kwh_today: Double
+)
+
+// ── ML ─────────────────────────────────────────────────────────────────────────
+
+data class RecommendationsResponse(
+    val recommendations: List<RoutineCandidate>,
+    @SerializedName("analyzed_days")   val analyzed_days: Int,
+    @SerializedName("total_commands")  val total_commands: Int
+)
+
+data class AnomalyItem(
+    @SerializedName("device_id")   val device_id: Int,
+    @SerializedName("device_name") val device_name: String,
+    val action: String,
+    val time: String,
+    @SerializedName("z_score")     val z_score: Float,
+    val message: String
+)
+
+data class AnomaliesResponse(
+    val anomalies: List<AnomalyItem>,
+    @SerializedName("checked_period") val checked_period: String
+)
+
+data class MLSettingsRequest(
+    @SerializedName("min_occurrences") val min_occurrences: Int,
+    @SerializedName("min_days")        val min_days: Int = 4
+)
+
+data class MLSettingsResponse(
+    @SerializedName("min_occurrences") val min_occurrences: Int,
+    @SerializedName("min_days")        val min_days: Int = 4
+)
+
+// ── Routines ───────────────────────────────────────────────────────────────────
+
+data class RoutineCreate(
+    val name: String,
+    @SerializedName("device_id")    val device_id: Int,
+    val action: String,
+    val value: String? = null,
+    @SerializedName("trigger_time") val trigger_time: String,
+    @SerializedName("days_of_week") val days_of_week: String
+)
+
+data class RoutineToggle(
+    @SerializedName("is_active") val is_active: Boolean
+)
+
+data class RoutineResponse(
+    val id: Int,
+    @SerializedName("user_id")         val user_id: Int,
+    val name: String,
+    @SerializedName("device_id")       val device_id: Int,
+    val action: String,
+    val value: String?,
+    @SerializedName("trigger_time")    val trigger_time: String,
+    @SerializedName("days_of_week")    val days_of_week: String,
+    @SerializedName("is_active")       val is_active: Boolean,
+    @SerializedName("is_ml_suggested") val is_ml_suggested: Boolean,
+    val confidence: Float?,
+    @SerializedName("created_at")      val created_at: String
 )
 
 /**
- * Un element din feed-ul de activitate recenta al dashboard-ului.
- * Returnat de GET /dashboard/activity?limit={n}.
- * Fiecare element reprezinta o comanda trimisa, cu informatii despre dispozitivul vizat.
+ * Un candidat de rutina detectat de ML — NU e inca persistat pe backend.
+ *
+ * Model comun pentru GET /routines/detect si GET /ml/recommendations: backend-ul
+ * foloseste aceeasi functie detect_routines() pentru ambele, deci returneaza exact
+ * aceleasi campuri. candidate_index e prezent doar in raspunsul /routines/detect
+ * (identifica sugestia in cadrul acelui raspuns — nu exista inca un id de baza de
+ * date pana cand utilizatorul nu alege sa creeze rutina); lipseste din /ml/recommendations.
+ *
+ * candidate_index e nullable (nu are default numeric) intentionat: Retrofit foloseste
+ * GsonConverterFactory simplu (fara adapter Kotlin-aware), care aloca obiectul prin
+ * reflectie si NU trece prin constructor — orice default din Kotlin pentru un camp
+ * numeric absent din JSON ar fi ignorat silentios (Gson ar lasa 0, nu valoarea default
+ * declarata). Un tip nullable primeste corect `null` de la Gson cand cheia lipseste din
+ * JSON, deci codul care citeste candidate_index trebuie sa trateze explicit cazul null
+ * (nu presupune niciodata ca e valid/unic pentru elemente venite din /ml/recommendations).
  */
-data class ActivityResponse(
-    val id: Int,
-    // Numele dispozitivului (join pe server intre comenzi si dispozitive)
-    @SerializedName("device_name") val device_name: String,
-    @SerializedName("command_type") val command_type: String,
-    // Momentul executiei comenzii — afisat relativ in UI (ex: "acum 5 minute")
-    @SerializedName("created_at") val created_at: String
+data class RoutineCandidate(
+    @SerializedName("device_id")       val device_id: Int,
+    @SerializedName("device_name")     val device_name: String = "",
+    val action: String,
+    val value: String?,
+    @SerializedName("trigger_time")    val trigger_time: String,
+    @SerializedName("days_of_week")    val days_of_week: String,
+    val occurrences: Int = 0,
+    @SerializedName("distinct_days")   val distinct_days: Int = 0,
+    val confidence: Float,
+    val name: String,
+    @SerializedName("candidate_index") val candidate_index: Int? = null
+)
+
+data class RoutineDetectResponse(
+    @SerializedName("routines_detected") val routines_detected: Int,
+    @SerializedName("routines_saved")    val routines_saved: Int,
+    val data: List<RoutineCandidate>
 )

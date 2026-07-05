@@ -34,6 +34,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -42,14 +43,17 @@ import com.denis.smarthome.ui.navigation.NavRoutes
 import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.AuthState
 import com.denis.smarthome.viewmodel.AuthViewModel
+import com.denis.smarthome.viewmodel.ForgotPasswordState
 
 /**
- * Ecranul de autentificare cu email si parola.
+ * Ecranul de autentificare cu email si parola — wrapper subtire peste ViewModel.
  *
  * Colecteaza [authState] din ViewModel folosind [collectAsState], iar
  * un [LaunchedEffect] asculta schimbarile starii: cand ajunge [AuthState.Success],
  * navigheaza la Home si curata stiva de navigare (popUpTo cu inclusive = true)
  * pentru a preveni intoarcerea la Login cu butonul Back.
+ * Starea formularului este pastrata aici (remember) si pasata catre [LoginScreenContent],
+ * care contine tot UI-ul si nu depinde de ViewModel (poate fi randat direct in @Preview).
  *
  * @param navController Controlerul de navigare Compose
  * @param authViewModel ViewModel-ul care gestioneaza logica de autentificare
@@ -68,6 +72,10 @@ fun LoginScreen(
     val isLoading = authState is AuthState.Loading
     val errorMessage = (authState as? AuthState.Error)?.message
 
+    val forgotState by authViewModel.forgotPasswordState.collectAsState()
+    var showForgotDialog by remember { mutableStateOf(false) }
+    var forgotEmail by remember { mutableStateOf("") }
+
     // LaunchedEffect ruleaza un bloc suspend ori de cate ori se schimba authState.
     // Cand login-ul reuseste, navigheaza la Home si elimina Login din stiva.
     LaunchedEffect(authState) {
@@ -79,6 +87,58 @@ fun LoginScreen(
         }
     }
 
+    LoginScreenContent(
+        email = email,
+        password = password,
+        passwordVisible = passwordVisible,
+        isLoading = isLoading,
+        errorMessage = errorMessage,
+        showForgotDialog = showForgotDialog,
+        forgotEmail = forgotEmail,
+        forgotState = forgotState,
+        onEmailChange = { email = it },
+        onPasswordChange = { password = it },
+        onPasswordVisibleToggle = { passwordVisible = !passwordVisible },
+        onForgotClick = { showForgotDialog = true },
+        onForgotDismiss = {
+            showForgotDialog = false
+            authViewModel.resetForgotPasswordState()
+        },
+        onForgotEmailChange = { forgotEmail = it },
+        onForgotSend = { authViewModel.forgotPassword(forgotEmail) },
+        onLoginClick = { authViewModel.login(email, password) },
+        onRegisterClick = {
+            authViewModel.resetState()
+            navController.navigate(NavRoutes.Register.route)
+        }
+    )
+}
+
+/**
+ * UI-ul ecranului de login, fara dependinta de ViewModel.
+ * Primeste toata starea ca parametri simpli, ceea ce permite randare in @Preview
+ * fara apeluri de retea.
+ */
+@Composable
+fun LoginScreenContent(
+    email: String,
+    password: String,
+    passwordVisible: Boolean,
+    isLoading: Boolean,
+    errorMessage: String?,
+    showForgotDialog: Boolean,
+    forgotEmail: String,
+    forgotState: ForgotPasswordState,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onPasswordVisibleToggle: () -> Unit,
+    onForgotClick: () -> Unit,
+    onForgotDismiss: () -> Unit,
+    onForgotEmailChange: (String) -> Unit,
+    onForgotSend: () -> Unit,
+    onLoginClick: () -> Unit,
+    onRegisterClick: () -> Unit
+) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -164,7 +224,7 @@ fun LoginScreen(
             // ── Formular: camp email cu tastatura de tip Email ──
             OutlinedTextField(
                 value = email,
-                onValueChange = { email = it },
+                onValueChange = onEmailChange,
                 label = { Text("Email Address") },
                 placeholder = { Text("name@example.com") },
                 leadingIcon = {
@@ -191,13 +251,13 @@ fun LoginScreen(
             // ── Formular: camp parola cu toggle vizibilitate ──
             OutlinedTextField(
                 value = password,
-                onValueChange = { password = it },
+                onValueChange = onPasswordChange,
                 label = { Text("Password") },
                 leadingIcon = {
                     Icon(Icons.Default.Lock, contentDescription = null)
                 },
                 trailingIcon = {
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    IconButton(onClick = onPasswordVisibleToggle) {
                         Icon(
                             imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                             contentDescription = if (passwordVisible) "Hide password" else "Show password",
@@ -224,13 +284,13 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // ── Link pentru recuperare parola (UI only, fara logica) ──
+            // ── Link pentru recuperare parola ──
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                 Text(
                     text = "Forgot password?",
                     color = Primary,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.clickable { }
+                    modifier = Modifier.clickable(onClick = onForgotClick)
                 )
             }
 
@@ -260,7 +320,7 @@ fun LoginScreen(
 
             // ── Butonul de Login: dezactivat in timpul incarcarii, afiseaza spinner ──
             Button(
-                onClick = { authViewModel.login(email, password) },
+                onClick = onLoginClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -305,10 +365,7 @@ fun LoginScreen(
                     color = Primary,
                     fontWeight = FontWeight.SemiBold,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.clickable {
-                        authViewModel.resetState()
-                        navController.navigate(NavRoutes.Register.route)
-                    }
+                    modifier = Modifier.clickable(onClick = onRegisterClick)
                 )
             }
 
@@ -328,27 +385,138 @@ fun LoginScreen(
                 )
                 HorizontalDivider(modifier = Modifier.weight(1f), color = Outline)
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // ── Iconite biometrice decorative (fingerprint + face ID, UI only) ──
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Fingerprint,
-                    contentDescription = "Fingerprint",
-                    tint = OnSurface,
-                    modifier = Modifier.size(28.dp)
-                )
-                Icon(
-                    imageVector = Icons.Default.Face,
-                    contentDescription = "Face ID",
-                    tint = OnSurface,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
         }
+    }
+
+    // Forgot password dialog
+    if (showForgotDialog) {
+        AlertDialog(
+            onDismissRequest = onForgotDismiss,
+            containerColor = Color(0xFF0D2B36),
+            title = { Text("Reset Password", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    when (val state = forgotState) {
+                        is ForgotPasswordState.Success -> {
+                            Text(
+                                "Check your email for reset instructions",
+                                color = Color(0xFF00BCD4)
+                            )
+                        }
+                        is ForgotPasswordState.Error -> {
+                            Text(state.message, color = Color.Red, style = MaterialTheme.typography.bodySmall)
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedTextField(
+                                value = forgotEmail,
+                                onValueChange = onForgotEmailChange,
+                                label = { Text("Email", color = Color(0xFF90A4AE)) },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF00BCD4),
+                                    unfocusedBorderColor = Color(0xFF37474F),
+                                    cursorColor = Color(0xFF00BCD4),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        else -> {
+                            OutlinedTextField(
+                                value = forgotEmail,
+                                onValueChange = onForgotEmailChange,
+                                label = { Text("Email", color = Color(0xFF90A4AE)) },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF00BCD4),
+                                    unfocusedBorderColor = Color(0xFF37474F),
+                                    cursorColor = Color(0xFF00BCD4),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                    if (forgotState is ForgotPasswordState.Loading) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .align(Alignment.CenterHorizontally),
+                            color = Color(0xFF00BCD4),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                if (forgotState !is ForgotPasswordState.Success) {
+                    TextButton(
+                        onClick = onForgotSend,
+                        enabled = forgotState !is ForgotPasswordState.Loading
+                    ) {
+                        Text("Send Reset Link", color = Color(0xFF00BCD4), fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onForgotDismiss) {
+                    Text("Cancel", color = Color.Gray)
+                }
+            }
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun LoginScreenPreview() {
+    SmartHomeTheme {
+        LoginScreenContent(
+            email = "",
+            password = "",
+            passwordVisible = false,
+            isLoading = false,
+            errorMessage = null,
+            showForgotDialog = false,
+            forgotEmail = "",
+            forgotState = ForgotPasswordState.Idle,
+            onEmailChange = {},
+            onPasswordChange = {},
+            onPasswordVisibleToggle = {},
+            onForgotClick = {},
+            onForgotDismiss = {},
+            onForgotEmailChange = {},
+            onForgotSend = {},
+            onLoginClick = {},
+            onRegisterClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun LoginScreenErrorPreview() {
+    SmartHomeTheme {
+        LoginScreenContent(
+            email = "user@example.com",
+            password = "wrongpass",
+            passwordVisible = false,
+            isLoading = false,
+            errorMessage = "Invalid email or password",
+            showForgotDialog = false,
+            forgotEmail = "",
+            forgotState = ForgotPasswordState.Idle,
+            onEmailChange = {},
+            onPasswordChange = {},
+            onPasswordVisibleToggle = {},
+            onForgotClick = {},
+            onForgotDismiss = {},
+            onForgotEmailChange = {},
+            onForgotSend = {},
+            onLoginClick = {},
+            onRegisterClick = {}
+        )
     }
 }

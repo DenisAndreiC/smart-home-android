@@ -31,39 +31,38 @@ import com.denis.smarthome.viewmodel.DeviceControlViewModel
  * Verifica daca dispozitivul este un televizor.
  * Conditie: tipul trebuie sa fie "ir" si numele sau protocolul IR sa contina "tv"/"television".
  */
-private fun isTvDevice(type: String, name: String, irProtocol: String?): Boolean {
-    val n = name.lowercase()
+private fun isTvDevice(type: String, name: String, irCodes: String?): Boolean {
     val t = type.lowercase()
+    if (t == "ir_tv") return true
+    val n = name.lowercase()
     return t == "ir" && (n.contains("tv") || n.contains("television") ||
-            irProtocol?.lowercase()?.contains("tv") == true)
+            irCodes?.lowercase()?.contains("tv") == true)
 }
 
 /**
  * Verifica daca dispozitivul este un aparat de aer conditionat.
- * Conditie: tipul "ir" si numele/protocolul contine "ac", "air", "conditioner" sau "nec".
  */
-private fun isAcDevice(type: String, name: String, irProtocol: String?): Boolean {
-    val n = name.lowercase()
+private fun isAcDevice(type: String, name: String, irCodes: String?): Boolean {
     val t = type.lowercase()
+    if (t == "ir_ac") return true
+    val n = name.lowercase()
     return t == "ir" && (n.contains("ac") || n.contains("air") || n.contains("conditioner") ||
-            irProtocol?.lowercase()?.contains("ac") == true ||
-            irProtocol?.lowercase()?.contains("nec") == true)
+            irCodes?.lowercase()?.contains("ac") == true)
 }
 
 /**
  * Verifica daca dispozitivul este un bec RGB.
- * Conditie: tipul "ir" si numele contine "rgb", "bulb" sau "light" (fara "lamp").
  */
 private fun isRgbDevice(type: String, name: String): Boolean {
-    val n = name.lowercase()
     val t = type.lowercase()
+    if (t == "ir_rgb") return true
+    val n = name.lowercase()
     return t == "ir" && (n.contains("rgb") || n.contains("bulb") ||
             (n.contains("light") && !n.contains("lamp")))
 }
 
 /**
  * Verifica daca dispozitivul este de tip relay sau Wake-on-LAN.
- * Aceste tipuri folosesc LampControlScreen ca interfata de control.
  */
 private fun isRelayDevice(type: String): Boolean {
     val t = type.lowercase()
@@ -106,10 +105,10 @@ fun DeviceControlRouter(
         else -> {
             val d = device!!
             when {
-                isTvDevice(d.device_type, d.name, d.ir_protocol) ->
+                isTvDevice(d.device_type, d.name, d.ir_codes) ->
                     TvRemoteScreen(navController, d, deviceId)
 
-                isAcDevice(d.device_type, d.name, d.ir_protocol) ->
+                isAcDevice(d.device_type, d.name, d.ir_codes) ->
                     AcControlScreen(navController, d, deviceId)
 
                 isRgbDevice(d.device_type, d.name) ->

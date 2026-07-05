@@ -27,10 +27,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.denis.smarthome.data.model.DeviceResponse
 import com.denis.smarthome.ui.components.DeviceListItem
 import com.denis.smarthome.ui.components.SmartFilterChip
 import com.denis.smarthome.ui.navigation.NavRoutes
@@ -40,10 +45,10 @@ import com.denis.smarthome.viewmodel.DeviceFilter
 import com.denis.smarthome.viewmodel.DevicesViewModel
 
 /**
- * Ecranul principal de gestiune a dispozitivelor.
+ * Ecranul principal de gestiune a dispozitivelor — wrapper subtire peste ViewModel.
  *
- * Colecteaza starea din [DevicesViewModel] si afiseaza lista filtrata.
- * Erorile sunt afisate printr-un [SnackbarHost] folosind [LaunchedEffect].
+ * Colecteaza starea din [DevicesViewModel] si o paseaza catre [DevicesListScreenContent],
+ * care contine tot UI-ul si nu depinde de ViewModel (poate fi randat direct in @Preview).
  *
  * @param navController Controlerul de navigare Compose
  * @param viewModel ViewModel-ul care gestioneaza lista si filtrele dispozitivelor
@@ -56,27 +61,102 @@ fun DevicesListScreen(
 ) {
     val filteredDevices by viewModel.filteredDevices.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val error by viewModel.error.collectAsState()
     val selectedFilter by viewModel.selectedFilter.collectAsState()
     val selectedRoom by viewModel.selectedRoom.collectAsState()
     val rooms by viewModel.rooms.collectAsState()
     val showAddDialog by viewModel.showAddDialog.collectAsState()
     val addForm by viewModel.addForm.collectAsState()
 
-    var showRoomDropdown by remember { mutableStateOf(false) }
-
-    // LaunchedEffect asculta eroarea: cand apare una, o afiseaza in Snackbar si o sterge din VM
-    val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(error) {
-        error?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.clearError()
+    // Reload devices when this screen becomes active again (e.g. navigating back
+    // from TvRemoteScreen after sending a power command) so last_status is fresh.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.loadDevices()
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    DevicesListScreenContent(
+        filteredDevices = filteredDevices,
+        isLoading = isLoading,
+        selectedFilter = selectedFilter,
+        selectedRoom = selectedRoom,
+        rooms = rooms,
+        showAddDialog = showAddDialog,
+        addForm = addForm,
+        onSetFilter = { viewModel.setFilter(it) },
+        onSetRoomFilter = { viewModel.setRoomFilter(it) },
+        onRefresh = { viewModel.loadDevices() },
+        onDeviceClick = { device -> navController.navigate(NavRoutes.DeviceControl.createRoute(device.id)) },
+        onDeleteDevice = { viewModel.deleteDevice(it) },
+        onShowAddDialog = { viewModel.showAddDialog() },
+        onHideAddDialog = { viewModel.hideAddDialog() },
+        onAddFormChange = { viewModel.updateAddForm(it) },
+        onAddConfirm = { viewModel.addDevice() }
+    )
+}
+
+/**
+ * UI-ul ecranului de gestiune a dispozitivelor, fara dependinta de ViewModel.
+ * Primeste toata starea ca parametri simpli si callback-uri lambda, ceea ce permite
+ * randare in @Preview fara apeluri de retea.
+ *
+ * Starea pur locala de UI (dropdown-ul de camere, dispozitivul selectat pentru
+ * stergere) ramane gestionata intern prin `remember`.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DevicesListScreenContent(
+    filteredDevices: List<DeviceResponse>,
+    isLoading: Boolean,
+    selectedFilter: DeviceFilter,
+    selectedRoom: String?,
+    rooms: List<String>,
+    showAddDialog: Boolean,
+    addForm: AddDeviceFormState,
+    onSetFilter: (DeviceFilter) -> Unit,
+    onSetRoomFilter: (String) -> Unit,
+    onRefresh: () -> Unit,
+    onDeviceClick: (DeviceResponse) -> Unit,
+    onDeleteDevice: (Int) -> Unit,
+    onShowAddDialog: () -> Unit,
+    onHideAddDialog: () -> Unit,
+    onAddFormChange: (AddDeviceFormState) -> Unit,
+    onAddConfirm: () -> Unit
+) {
+    var showRoomDropdown by remember { mutableStateOf(false) }
+    var deviceToDelete by remember { mutableStateOf<Int?>(null) }
+
+    // Dialog confirmare stergere dispozitiv
+    if (deviceToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { deviceToDelete = null },
+            containerColor = Surface,
+            titleContentColor = OnBackground,
+            textContentColor = OnSurface,
+            title = { Text("Delete Device", fontWeight = FontWeight.Bold) },
+            text = { Text("Are you sure you want to delete this device?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteDevice(deviceToDelete!!)
+                        deviceToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorColor)
+                ) { Text("Delete", color = Color.White, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deviceToDelete = null }) {
+                    Text("Cancel", color = OnSurface)
+                }
+            }
+        )
     }
 
     Scaffold(
-        containerColor = Background,
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        containerColor = Background
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -95,9 +175,6 @@ fun DevicesListScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { }) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = OnSurface)
-                    }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Devices",
@@ -111,7 +188,7 @@ fun DevicesListScreen(
                             fontSize = 13.sp
                         )
                     }
-                    IconButton(onClick = { viewModel.showAddDialog() }) {
+                    IconButton(onClick = onShowAddDialog) {
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
@@ -140,7 +217,7 @@ fun DevicesListScreen(
                     SmartFilterChip(
                         label = "All",
                         selected = selectedFilter == DeviceFilter.ALL,
-                        onClick = { viewModel.setFilter(DeviceFilter.ALL) }
+                        onClick = { onSetFilter(DeviceFilter.ALL) }
                     )
                 }
                 item {
@@ -170,7 +247,7 @@ fun DevicesListScreen(
                                         Text(room, color = OnBackground, style = MaterialTheme.typography.bodyMedium)
                                     },
                                     onClick = {
-                                        viewModel.setRoomFilter(room)
+                                        onSetRoomFilter(room)
                                         showRoomDropdown = false
                                     }
                                 )
@@ -188,14 +265,14 @@ fun DevicesListScreen(
                     SmartFilterChip(
                         label = "IR Devices",
                         selected = selectedFilter == DeviceFilter.IR,
-                        onClick = { viewModel.setFilter(DeviceFilter.IR) }
+                        onClick = { onSetFilter(DeviceFilter.IR) }
                     )
                 }
                 item {
                     SmartFilterChip(
                         label = "Relay",
                         selected = selectedFilter == DeviceFilter.RELAY,
-                        onClick = { viewModel.setFilter(DeviceFilter.RELAY) }
+                        onClick = { onSetFilter(DeviceFilter.RELAY) }
                     )
                 }
             }
@@ -205,7 +282,7 @@ fun DevicesListScreen(
             @OptIn(ExperimentalMaterial3Api::class)
             PullToRefreshBox(
                 isRefreshing = isLoading,
-                onRefresh = { viewModel.loadDevices() },
+                onRefresh = onRefresh,
                 modifier = Modifier.fillMaxSize()
             ) {
                 if (isLoading) {
@@ -221,7 +298,7 @@ fun DevicesListScreen(
                             Icon(Icons.Default.DevicesOther, contentDescription = null, tint = OnSurface, modifier = Modifier.size(64.dp))
                             Text("No devices yet", color = OnSurface, style = MaterialTheme.typography.bodyLarge)
                             Text("Add your first device using the + button", color = OnSurface.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
-                            TextButton(onClick = { viewModel.showAddDialog() }) {
+                            TextButton(onClick = onShowAddDialog) {
                                 Text("Add Device", color = Primary)
                             }
                         }
@@ -234,10 +311,8 @@ fun DevicesListScreen(
                         items(filteredDevices, key = { it.id }) { device ->
                             DeviceListItem(
                                 device = device,
-                                onToggle = { isOn -> viewModel.toggleDevice(device.id, isOn) },
-                                onClick = {
-                                    navController.navigate(NavRoutes.DeviceControl.createRoute(device.id))
-                                }
+                                onClick = { onDeviceClick(device) },
+                                onDelete = { deviceToDelete = device.id }
                             )
                         }
                     }
@@ -251,9 +326,9 @@ fun DevicesListScreen(
         AddDeviceDialog(
             form = addForm,
             rooms = rooms,
-            onFormChange = viewModel::updateAddForm,
-            onConfirm = { viewModel.addDevice() },
-            onDismiss = { viewModel.hideAddDialog() }
+            onFormChange = onAddFormChange,
+            onConfirm = onAddConfirm,
+            onDismiss = onHideAddDialog
         )
     }
 }
@@ -281,8 +356,17 @@ private fun AddDeviceDialog(
     onDismiss: () -> Unit
 ) {
     var typeExpanded by remember { mutableStateOf(false) }
-    // Tipurile de dispozitive suportate de backend
-    val deviceTypes = listOf("relay", "ir", "wol")
+    var brandExpanded by remember { mutableStateOf(false) }
+    var remoteTypeExpanded by remember { mutableStateOf(false) }
+    val deviceTypes = listOf(
+        "TV Remote"           to "ir_tv",
+        "Air Conditioner"     to "ir_ac",
+        "RGB Bulb"            to "ir_rgb",
+        "Smart Relay"         to "relay",
+        "Wake on LAN"         to "wol"
+    )
+    val remoteTypes = listOf("22-key", "44-key", "24-key")
+    val tvBrands = listOf("Samsung", "LG", "Philips", "Sony", "Panasonic")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -317,14 +401,13 @@ private fun AddDeviceDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // ExposedDropdownMenuBox afiseaza un camp read-only cu meniu expandabil
-                // pentru selectarea tipului dispozitivului (relay / ir / wol)
+                // Dropdown Device Type
                 ExposedDropdownMenuBox(
                     expanded = typeExpanded,
                     onExpandedChange = { typeExpanded = it }
                 ) {
                     OutlinedTextField(
-                        value = form.deviceType,
+                        value = deviceTypes.firstOrNull { it.second == form.deviceType }?.first ?: form.deviceType,
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Device Type") },
@@ -339,14 +422,89 @@ private fun AddDeviceDialog(
                         onDismissRequest = { typeExpanded = false },
                         modifier = Modifier.background(Surface)
                     ) {
-                        deviceTypes.forEach { type ->
+                        deviceTypes.forEach { (label, typeValue) ->
                             DropdownMenuItem(
-                                text = { Text(type.uppercase(), color = OnBackground) },
+                                text = { Text(label, color = OnBackground) },
                                 onClick = {
-                                    onFormChange(form.copy(deviceType = type))
+                                    val newTopic = if (typeValue.startsWith("ir"))
+                                        "smarthome/devices/ir/command"
+                                    else
+                                        "smarthome/devices/relay/command"
+                                    onFormChange(form.copy(deviceType = typeValue, mqttTopic = newTopic, brand = ""))
                                     typeExpanded = false
                                 }
                             )
+                        }
+                    }
+                }
+
+                // Dropdown Brand — visible only for ir_tv
+                if (form.deviceType == "ir_tv") {
+                    ExposedDropdownMenuBox(
+                        expanded = brandExpanded,
+                        onExpandedChange = { brandExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = form.brand,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Brand") },
+                            placeholder = { Text("Select brand") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = brandExpanded) },
+                            colors = fieldColors,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = brandExpanded,
+                            onDismissRequest = { brandExpanded = false },
+                            modifier = Modifier.background(Surface)
+                        ) {
+                            tvBrands.forEach { brand ->
+                                DropdownMenuItem(
+                                    text = { Text(brand, color = OnBackground) },
+                                    onClick = {
+                                        onFormChange(form.copy(brand = brand))
+                                        brandExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Dropdown Remote Type — visible only for ir_rgb
+                if (form.deviceType == "ir_rgb") {
+                    ExposedDropdownMenuBox(
+                        expanded = remoteTypeExpanded,
+                        onExpandedChange = { remoteTypeExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = form.remoteType,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Remote Type") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = remoteTypeExpanded) },
+                            colors = fieldColors,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = remoteTypeExpanded,
+                            onDismissRequest = { remoteTypeExpanded = false },
+                            modifier = Modifier.background(Surface)
+                        ) {
+                            remoteTypes.forEach { rt ->
+                                DropdownMenuItem(
+                                    text = { Text(rt, color = OnBackground) },
+                                    onClick = {
+                                        onFormChange(form.copy(remoteType = rt))
+                                        remoteTypeExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -361,14 +519,6 @@ private fun AddDeviceDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                OutlinedTextField(
-                    value = form.mqttTopic,
-                    onValueChange = { onFormChange(form.copy(mqttTopic = it)) },
-                    label = { Text("MQTT Topic") },
-                    singleLine = true,
-                    colors = fieldColors,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
         },
         confirmButton = {
@@ -386,4 +536,132 @@ private fun AddDeviceDialog(
             }
         }
     )
+}
+
+private val previewDevices = listOf(
+    DeviceResponse(
+        id = 1,
+        name = "Living Room Lamp",
+        device_type = "relay",
+        room = "Living Room",
+        room_id = 1,
+        mqtt_topic = "smarthome/devices/relay/command",
+        is_online = true,
+        last_status = "on",
+        mac_address = null,
+        ir_codes = null,
+        ir_remote_type = null,
+        owner_id = 1,
+        created_at = "2026-01-01T00:00:00"
+    ),
+    DeviceResponse(
+        id = 2,
+        name = "Living Room TV",
+        device_type = "ir_tv",
+        room = "Living Room",
+        room_id = 1,
+        mqtt_topic = "smarthome/devices/ir/command",
+        is_online = false,
+        last_status = "off",
+        mac_address = null,
+        ir_codes = "samsung",
+        ir_remote_type = null,
+        owner_id = 1,
+        created_at = "2026-01-01T00:00:00"
+    ),
+    DeviceResponse(
+        id = 3,
+        name = "Living Room Bulb",
+        device_type = "ir_rgb",
+        room = "Living Room",
+        room_id = 1,
+        mqtt_topic = "smarthome/devices/ir/command",
+        is_online = true,
+        last_status = "on",
+        mac_address = null,
+        ir_codes = null,
+        ir_remote_type = "24-key",
+        owner_id = 1,
+        created_at = "2026-01-01T00:00:00"
+    ),
+    DeviceResponse(
+        id = 4,
+        name = "Bedroom AC",
+        device_type = "ir_ac",
+        room = "Bedroom",
+        room_id = 2,
+        mqtt_topic = "smarthome/devices/ir/command",
+        is_online = false,
+        last_status = "off",
+        mac_address = null,
+        ir_codes = null,
+        ir_remote_type = null,
+        owner_id = 1,
+        created_at = "2026-01-01T00:00:00"
+    ),
+    DeviceResponse(
+        id = 5,
+        name = "Bedroom Socket",
+        device_type = "relay",
+        room = "Bedroom",
+        room_id = 2,
+        mqtt_topic = "smarthome/devices/relay/command",
+        is_online = true,
+        last_status = "on",
+        mac_address = null,
+        ir_codes = null,
+        ir_remote_type = null,
+        owner_id = 1,
+        created_at = "2026-01-01T00:00:00"
+    )
+)
+
+@Preview(showBackground = true)
+@Composable
+fun DevicesListScreenPreview() {
+    SmartHomeTheme {
+        DevicesListScreenContent(
+            filteredDevices = previewDevices,
+            isLoading = false,
+            selectedFilter = DeviceFilter.ALL,
+            selectedRoom = null,
+            rooms = listOf("Living Room", "Bedroom"),
+            showAddDialog = false,
+            addForm = AddDeviceFormState(),
+            onSetFilter = {},
+            onSetRoomFilter = {},
+            onRefresh = {},
+            onDeviceClick = {},
+            onDeleteDevice = {},
+            onShowAddDialog = {},
+            onHideAddDialog = {},
+            onAddFormChange = {},
+            onAddConfirm = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun DevicesListScreenEmptyPreview() {
+    SmartHomeTheme {
+        DevicesListScreenContent(
+            filteredDevices = emptyList(),
+            isLoading = false,
+            selectedFilter = DeviceFilter.ALL,
+            selectedRoom = null,
+            rooms = emptyList(),
+            showAddDialog = false,
+            addForm = AddDeviceFormState(),
+            onSetFilter = {},
+            onSetRoomFilter = {},
+            onRefresh = {},
+            onDeviceClick = {},
+            onDeleteDevice = {},
+            onShowAddDialog = {},
+            onHideAddDialog = {},
+            onAddFormChange = {},
+            onAddConfirm = {}
+        )
+    }
 }

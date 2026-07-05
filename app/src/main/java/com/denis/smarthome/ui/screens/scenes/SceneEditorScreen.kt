@@ -77,6 +77,18 @@ private fun commandOptionsForDevice(device: DeviceResponse): List<Pair<String, S
             }
             label to "$type${data?.let { "|$it" } ?: ""}"
         }
+        // Becul RGB IR nu are toggle real de power (vezi RgbBulbViewModel) — "Turn On"/"Turn Off"
+        // ar trimite power|on / power|off, care acum inseamna "brighten one step" / o comanda
+        // fara handler. Oferim in schimb comenzile reale disponibile pe acest bec.
+        "ir_rgb" -> listOf(
+            "Red" to "color|red",
+            "Green" to "color|green",
+            "Blue" to "color|blue",
+            "Joc de lumini" to "color|warm_white",
+            "Lumina mai tare" to "power|on",
+            "Lumina mai slaba" to "brightness_up|up",
+            "Ice" to "flash|flash"
+        )
         else -> listOf(
             "Turn On"  to "power|on",
             "Turn Off" to "power|off"

@@ -1,5 +1,8 @@
 package com.denis.smarthome.ui.screens.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,8 +18,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -24,27 +29,150 @@ import androidx.navigation.NavController
 import com.denis.smarthome.data.api.RetrofitClient
 import com.denis.smarthome.ui.navigation.NavRoutes
 import com.denis.smarthome.ui.theme.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.denis.smarthome.viewmodel.SettingsViewModel
 
+/**
+ * Stare read-only pentru [SettingsScreenContent] — un pachet simplu de date fara
+ * nicio dependinta de ViewModel, ceea ce permite randarea ecranului in @Preview.
+ */
+data class SettingsUiState(
+    val userName: String,
+    val userEmail: String,
+    val isServerConnected: Boolean,
+    val darkTheme: Boolean,
+    val notifications: Boolean,
+    val lastSyncTime: String,
+    val avatarUrl: String?,
+    val isUploadingAvatar: Boolean,
+    val isVerified: Boolean,
+    val mlMinOccurrences: Int,
+    val mlMinDays: Int,
+    val verificationSent: Boolean,
+    val settingsError: String?
+)
+
+/**
+ * Ecranul de setari — wrapper subtire peste [SettingsViewModel].
+ * Citeste starea din ViewModel si o paseaza catre [SettingsScreenContent], care
+ * contine tot UI-ul si nu depinde de ViewModel (poate fi randat direct in @Preview).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     navController: NavController,
     viewModel: SettingsViewModel = viewModel()
 ) {
+    val context               = LocalContext.current
     val userName          by viewModel.userName.collectAsState()
     val userEmail         by viewModel.userEmail.collectAsState()
     val isServerConnected by viewModel.isServerConnected.collectAsState()
     val darkTheme         by viewModel.darkTheme.collectAsState()
     val notifications     by viewModel.notifications.collectAsState()
     val lastSyncTime      by viewModel.lastSyncTime.collectAsState()
+    val avatarUrl         by viewModel.avatarUrl.collectAsState()
+    val isUploading       by viewModel.isUploadingAvatar.collectAsState()
+    val isVerified           by viewModel.isVerified.collectAsState()
+    val mlMinOccurrences     by viewModel.mlMinOccurrences.collectAsState()
+    val mlMinDays            by viewModel.mlMinDays.collectAsState()
+    val verificationSent     by viewModel.verificationSent.collectAsState()
+    val settingsError        by viewModel.settingsError.collectAsState()
+
+    // Gallery launcher — opens image picker, passes selected URI to the ViewModel
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri -> uri?.let { viewModel.uploadAvatar(it) } }
+
+    SettingsScreenContent(
+        state = SettingsUiState(
+            userName = userName,
+            userEmail = userEmail,
+            isServerConnected = isServerConnected,
+            darkTheme = darkTheme,
+            notifications = notifications,
+            lastSyncTime = lastSyncTime,
+            avatarUrl = avatarUrl,
+            isUploadingAvatar = isUploading,
+            isVerified = isVerified,
+            mlMinOccurrences = mlMinOccurrences,
+            mlMinDays = mlMinDays,
+            verificationSent = verificationSent,
+            settingsError = settingsError
+        ),
+        onToggleDarkTheme = { viewModel.toggleDarkTheme() },
+        onToggleNotifications = { viewModel.toggleNotifications() },
+        onUpdateUsername = { viewModel.updateUsername(it) },
+        onResendVerification = { viewModel.resendVerification() },
+        onMinOccurrencesChange = { viewModel.updateMLMinOccurrences(it) },
+        onMinDaysChange = { viewModel.updateMLMinDays(it) },
+        onAvatarClick = { galleryLauncher.launch("image/*") },
+        onChangePasswordClick = { navController.navigate(NavRoutes.ChangePassword.route) },
+        onLogoutConfirm = {
+            viewModel.logout()
+            navController.navigate(NavRoutes.Login.route) {
+                popUpTo(0) { inclusive = true }
+            }
+        },
+        onReportBug = {
+            val intent = Intent(Intent.ACTION_SENDTO).apply {
+                data = Uri.parse("mailto:")
+                putExtra(Intent.EXTRA_EMAIL, arrayOf("cucudenis24@stud.ase.ro"))
+                putExtra(Intent.EXTRA_SUBJECT, "[SmartHome Bug Report]")
+                putExtra(Intent.EXTRA_TEXT,
+                    "Device: ${Build.MODEL}\nAndroid: ${Build.VERSION.RELEASE}\nApp version: 1.0")
+            }
+            context.startActivity(Intent.createChooser(intent, "Send Email"))
+        },
+        onErrorShown = { viewModel.clearSettingsError() }
+    )
+}
+
+/**
+ * UI-ul ecranului de setari, fara dependinta de ViewModel.
+ * Primeste toata starea prin [SettingsUiState] plus callback-uri simple,
+ * ceea ce permite randare in @Preview fara apeluri de retea.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreenContent(
+    state: SettingsUiState,
+    onToggleDarkTheme: () -> Unit,
+    onToggleNotifications: () -> Unit,
+    onUpdateUsername: (String) -> Unit,
+    onResendVerification: () -> Unit,
+    onMinOccurrencesChange: (Int) -> Unit,
+    onMinDaysChange: (Int) -> Unit,
+    onAvatarClick: () -> Unit,
+    onChangePasswordClick: () -> Unit,
+    onLogoutConfirm: () -> Unit,
+    onReportBug: () -> Unit,
+    onErrorShown: () -> Unit
+) {
+    val baseUrl = RetrofitClient.rootUrl
+
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var showLogoutDialog      by remember { mutableStateOf(false) }
     var showUrlDialog         by remember { mutableStateOf(false) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
-    var showBugDialog         by remember { mutableStateOf(false) }
     var showTosDialog         by remember { mutableStateOf(false) }
-    var showLanguageDialog    by remember { mutableStateOf(false) }
+    var newUsernameInput      by remember { mutableStateOf("") }
+
+    // Show error snackbar when settingsError is set
+    LaunchedEffect(state.settingsError) {
+        state.settingsError?.let {
+            snackbarHostState.showSnackbar(it)
+            onErrorShown()
+        }
+    }
+
+    // Pre-fill display name input when dialog opens
+    LaunchedEffect(showEditProfileDialog) {
+        if (showEditProfileDialog) newUsernameInput = state.userName
+    }
 
     // Logout confirmation
     if (showLogoutDialog) {
@@ -55,11 +183,8 @@ fun SettingsScreen(
             text  = { Text("Are you sure you want to logout?", color = OnSurface) },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.logout()
                     showLogoutDialog = false
-                    navController.navigate(NavRoutes.Login.route) {
-                        popUpTo(0) { inclusive = true }
-                    }
+                    onLogoutConfirm()
                 }) {
                     Text("Logout", color = ErrorColor, fontWeight = FontWeight.Bold)
                 }
@@ -80,35 +205,32 @@ fun SettingsScreen(
             title = { Text("Edit Profile", color = OnBackground, fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Current account:", color = OnSurface, fontSize = 12.sp)
-                    Text(userName.ifBlank { "—" }, color = Primary, fontWeight = FontWeight.Bold)
-                    Text(userEmail.ifBlank { "—" }, color = OnSurface, fontSize = 13.sp)
-                    Spacer(Modifier.height(4.dp))
-                    Text("Profile editing is not available in this version.", color = OnSurface, fontSize = 12.sp)
+                    Text(state.userEmail.ifBlank { "—" }, color = OnSurface, fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = newUsernameInput,
+                        onValueChange = { newUsernameInput = it },
+                        label = { Text("Display Name") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Primary,
+                            focusedLabelColor = Primary,
+                            unfocusedBorderColor = Outline,
+                            cursorColor = Primary,
+                            focusedTextColor = OnBackground,
+                            unfocusedTextColor = OnBackground
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showEditProfileDialog = false }) { Text("OK", color = Primary) }
-            }
-        )
-    }
-
-    // Report a Bug dialog
-    if (showBugDialog) {
-        AlertDialog(
-            onDismissRequest = { showBugDialog = false },
-            containerColor = Surface,
-            title = { Text("Report a Bug", color = OnBackground, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Found a bug? Contact us at:", color = OnSurface)
-                    Text("support@smarthome.app", color = Primary, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(4.dp))
-                    Text("Please describe the issue and the steps to reproduce it.", color = OnSurface, fontSize = 12.sp)
-                }
+                TextButton(onClick = {
+                    if (newUsernameInput.isNotBlank()) onUpdateUsername(newUsernameInput)
+                    showEditProfileDialog = false
+                }) { Text("Save", color = Primary, fontWeight = FontWeight.Bold) }
             },
-            confirmButton = {
-                TextButton(onClick = { showBugDialog = false }) { Text("OK", color = Primary) }
+            dismissButton = {
+                TextButton(onClick = { showEditProfileDialog = false }) { Text("Cancel", color = OnSurface) }
             }
         )
     }
@@ -134,39 +256,6 @@ fun SettingsScreen(
         )
     }
 
-    // Language dialog
-    if (showLanguageDialog) {
-        val languages = listOf("English", "Română")
-        AlertDialog(
-            onDismissRequest = { showLanguageDialog = false },
-            containerColor = Surface,
-            title = { Text("Language", color = OnBackground, fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    languages.forEach { lang ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showLanguageDialog = false }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(lang, color = OnBackground, modifier = Modifier.weight(1f))
-                            if (lang == "Română") {
-                                Icon(Icons.Default.Check, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text("Language change requires app restart.", color = OnSurface, fontSize = 11.sp)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showLanguageDialog = false }) { Text("Cancel", color = OnSurface) }
-            }
-        )
-    }
-
     // Backend URL dialog
     if (showUrlDialog) {
         AlertDialog(
@@ -188,8 +277,12 @@ fun SettingsScreen(
         )
     }
 
+    Scaffold(
+        containerColor = Background,
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { innerPadding ->
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Background),
+        modifier = Modifier.fillMaxSize().background(Background).padding(innerPadding),
         contentPadding = PaddingValues(bottom = 32.dp)
     ) {
         // ── Header ────────────────────────────────────────────────────────────
@@ -213,37 +306,154 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Clickable avatar — tap to open gallery picker
                         Box(
-                            modifier = Modifier.size(64.dp).clip(CircleShape)
-                                .background(SurfaceVariant),
+                            modifier = Modifier
+                                .size(72.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF1A3A4A))
+                                .clickable { onAvatarClick() },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Person, contentDescription = null, tint = OnSurface, modifier = Modifier.size(32.dp))
+                            val fullUrl = state.avatarUrl?.let { baseUrl + it }
+                            if (fullUrl != null) {
+                                AsyncImage(
+                                    model = fullUrl,
+                                    contentDescription = "Profile avatar",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = "Default avatar",
+                                    modifier = Modifier.size(40.dp),
+                                    tint = Primary
+                                )
+                            }
+                            if (state.isUploadingAvatar) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(32.dp),
+                                    color = Primary,
+                                    strokeWidth = 3.dp
+                                )
+                            }
+                            // Camera badge in bottom-right corner
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(22.dp)
+                                    .clip(CircleShape)
+                                    .background(Primary),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.CameraAlt,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
                         }
                         Spacer(Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = userName.ifBlank { "Your Account" },
+                                text = state.userName.ifBlank { "Your Account" },
                                 color = OnBackground,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = userEmail.ifBlank { "Not loaded" },
+                                text = state.userEmail.ifBlank { "Not loaded" },
                                 color = OnSurface,
                                 fontSize = 14.sp
                             )
+                            Spacer(Modifier.height(4.dp))
+                            // Verified / Not verified badge
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                if (state.isVerified) {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = "Verified",
+                                        tint = Color(0xFF4CAF50),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        "Verified",
+                                        color = Color(0xFF4CAF50),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                } else {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.clickable(enabled = !state.verificationSent) {
+                                            onResendVerification()
+                                        }
+                                    ) {
+                                        if (state.verificationSent) {
+                                            Icon(
+                                                Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = Color(0xFF4CAF50),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                "Verification email sent!",
+                                                color = Color(0xFF4CAF50),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        } else {
+                                            Icon(
+                                                Icons.Default.Warning,
+                                                contentDescription = "Not verified",
+                                                tint = Color(0xFFFF9800),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                "Not verified — tap to resend email",
+                                                color = Color(0xFFFF9800),
+                                                fontSize = 12.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     Spacer(Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = { showEditProfileDialog = true },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Primary),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
-                    ) {
-                        Text("Edit Profile", color = Primary, fontSize = 13.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { showEditProfileDialog = true },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Primary),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                        ) {
+                            Text("Edit Profile", color = Primary, fontSize = 13.sp)
+                        }
+                        // Navigate to Change Password screen
+                        OutlinedButton(
+                            onClick = onChangePasswordClick,
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Outline),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = Primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("Change Password", color = Primary, fontSize = 13.sp)
+                        }
                     }
                 }
             }
@@ -274,11 +484,11 @@ fun SettingsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Box(
                                     modifier = Modifier.size(8.dp).clip(CircleShape)
-                                        .background(if (isServerConnected) Color(0xFF4CAF50) else ErrorColor)
+                                        .background(if (state.isServerConnected) Color(0xFF4CAF50) else ErrorColor)
                                 )
                                 Text(
-                                    if (isServerConnected) "Connected" else "Disconnected",
-                                    color = if (isServerConnected) Color(0xFF4CAF50) else ErrorColor,
+                                    if (state.isServerConnected) "Connected" else "Disconnected",
+                                    color = if (state.isServerConnected) Color(0xFF4CAF50) else ErrorColor,
                                     fontSize = 13.sp
                                 )
                             }
@@ -288,7 +498,7 @@ fun SettingsScreen(
                     SettingsRow(
                         icon = Icons.Default.Sync,
                         label = "Last Sync",
-                        value = lastSyncTime
+                        value = state.lastSyncTime
                     )
                 }
             }
@@ -310,8 +520,8 @@ fun SettingsScreen(
                         label = "Dark Theme",
                         trailingContent = {
                             Switch(
-                                checked = darkTheme,
-                                onCheckedChange = { viewModel.toggleDarkTheme() },
+                                checked = state.darkTheme,
+                                onCheckedChange = { onToggleDarkTheme() },
                                 colors = SwitchDefaults.colors(
                                     checkedTrackColor = Primary, checkedThumbColor = Color.White,
                                     uncheckedTrackColor = SurfaceVariant, uncheckedThumbColor = OnSurface
@@ -325,8 +535,8 @@ fun SettingsScreen(
                         label = "Push Notifications",
                         trailingContent = {
                             Switch(
-                                checked = notifications,
-                                onCheckedChange = { viewModel.toggleNotifications() },
+                                checked = state.notifications,
+                                onCheckedChange = { onToggleNotifications() },
                                 colors = SwitchDefaults.colors(
                                     checkedTrackColor = Primary, checkedThumbColor = Color.White,
                                     uncheckedTrackColor = SurfaceVariant, uncheckedThumbColor = OnSurface
@@ -338,10 +548,150 @@ fun SettingsScreen(
                     SettingsRow(
                         icon = Icons.Default.Language,
                         label = "Language",
-                        value = "Română",
-                        showChevron = true,
-                        onClick = { showLanguageDialog = true }
+                        value = "English"
                     )
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+        }
+
+        // ── Smart Recommendations (ML Settings) ───────────────────────────────
+        item {
+            SettingsSectionTitle("SMART RECOMMENDATIONS")
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                colors = CardDefaults.cardColors(containerColor = Surface),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier.size(36.dp).clip(CircleShape)
+                                .background(PrimaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = Primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Minimum pattern occurrences",
+                                color = OnBackground,
+                                fontSize = 15.sp
+                            )
+                            Text(
+                                "How many times a pattern must repeat before suggesting a routine",
+                                color = OnSurface,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            state.mlMinOccurrences.toString(),
+                            color = Primary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Slider(
+                        value = state.mlMinOccurrences.toFloat(),
+                        onValueChange = { newVal ->
+                            onMinOccurrencesChange(newVal.toInt())
+                        },
+                        valueRange = 3f..20f,
+                        steps = 16,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Primary,
+                            activeTrackColor = Primary,
+                            inactiveTrackColor = Outline
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("3", color = OnSurface, fontSize = 11.sp)
+                        Text("20", color = OnSurface, fontSize = 11.sp)
+                    }
+
+                    HorizontalDivider(
+                        color = Outline,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+
+                    // Second slider: minimum distinct days
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier.size(36.dp).clip(CircleShape)
+                                .background(PrimaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                tint = Primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Minimum different days",
+                                color = OnBackground,
+                                fontSize = 15.sp
+                            )
+                            Text(
+                                "Pattern must repeat on at least this many different days",
+                                color = OnSurface,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            state.mlMinDays.toString(),
+                            color = Primary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Slider(
+                        value = state.mlMinDays.toFloat(),
+                        onValueChange = { newVal ->
+                            onMinDaysChange(newVal.toInt())
+                        },
+                        valueRange = 2f..7f,
+                        steps = 4,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Primary,
+                            activeTrackColor = Primary,
+                            inactiveTrackColor = Outline
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("2", color = OnSurface, fontSize = 11.sp)
+                        Text("7", color = OnSurface, fontSize = 11.sp)
+                    }
                 }
             }
             Spacer(Modifier.height(20.dp))
@@ -357,15 +707,18 @@ fun SettingsScreen(
                 border = androidx.compose.foundation.BorderStroke(1.dp, Outline)
             ) {
                 Column {
-                    SettingsRow(icon = Icons.Default.Info,        label = "Version",          value = "1.0.0")
+                    SettingsRow(icon = Icons.Default.Info, label = "Version", value = "1.0.0")
                     HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
-                    SettingsRow(icon = Icons.Default.Code,        label = "Backend Version",  value = "FastAPI 0.115")
-                    HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
-                    SettingsRow(icon = Icons.Default.BugReport,   label = "Report a Bug",     showChevron = true, onClick = { showBugDialog = true })
+                    SettingsRow(
+                        icon = Icons.Default.BugReport,
+                        label = "Report a Bug",
+                        showChevron = true,
+                        onClick = onReportBug
+                    )
                     HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
                     SettingsRow(icon = Icons.Default.Description,  label = "Terms of Service", showChevron = true, onClick = { showTosDialog = true })
                     HorizontalDivider(color = Outline, modifier = Modifier.padding(horizontal = 14.dp))
-                    SettingsRow(icon = Icons.Default.PrivacyTip,  label = "Privacy Policy",   showChevron = true, onClick = { showTosDialog = true })
+                    SettingsRow(icon = Icons.Default.PrivacyTip,   label = "Privacy Policy",   showChevron = true, onClick = { showTosDialog = true })
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -385,7 +738,8 @@ fun SettingsScreen(
                 Text("Logout", color = ErrorColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
-    }
+    } // end LazyColumn
+    } // end Scaffold
 }
 
 @Composable
@@ -442,5 +796,67 @@ private fun SettingsRow(
                 Icon(Icons.Default.ChevronRight, contentDescription = null, tint = OnSurface, modifier = Modifier.size(18.dp))
             }
         }
+    }
+}
+
+private val previewSettingsState = SettingsUiState(
+    userName = "Denis Andrei",
+    userEmail = "denis@example.com",
+    isServerConnected = true,
+    darkTheme = true,
+    notifications = true,
+    lastSyncTime = "14:35",
+    avatarUrl = null,
+    isUploadingAvatar = false,
+    isVerified = true,
+    mlMinOccurrences = 5,
+    mlMinDays = 4,
+    verificationSent = false,
+    settingsError = null
+)
+
+@Preview(showBackground = true)
+@Composable
+fun SettingsScreenPreview() {
+    SmartHomeTheme {
+        SettingsScreenContent(
+            state = previewSettingsState,
+            onToggleDarkTheme = {},
+            onToggleNotifications = {},
+            onUpdateUsername = {},
+            onResendVerification = {},
+            onMinOccurrencesChange = {},
+            onMinDaysChange = {},
+            onAvatarClick = {},
+            onChangePasswordClick = {},
+            onLogoutConfirm = {},
+            onReportBug = {},
+            onErrorShown = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun SettingsScreenUnverifiedPreview() {
+    SmartHomeTheme {
+        SettingsScreenContent(
+            state = previewSettingsState.copy(
+                isVerified = false,
+                verificationSent = false,
+                isServerConnected = false
+            ),
+            onToggleDarkTheme = {},
+            onToggleNotifications = {},
+            onUpdateUsername = {},
+            onResendVerification = {},
+            onMinOccurrencesChange = {},
+            onMinDaysChange = {},
+            onAvatarClick = {},
+            onChangePasswordClick = {},
+            onLogoutConfirm = {},
+            onReportBug = {},
+            onErrorShown = {}
+        )
     }
 }

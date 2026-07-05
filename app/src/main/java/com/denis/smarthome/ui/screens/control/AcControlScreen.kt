@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -39,13 +41,14 @@ import com.denis.smarthome.ui.components.CircularTemperatureDisplay
 import com.denis.smarthome.ui.components.ModeSelector
 import com.denis.smarthome.ui.theme.*
 import com.denis.smarthome.viewmodel.AcControlViewModel
+import com.denis.smarthome.viewmodel.AcMode
 import com.denis.smarthome.viewmodel.FanSpeed
 
 /**
- * Ecranul principal de control al aparatului de aer conditionat.
- * Colecteaza toate starile din AcControlViewModel si le afiseaza in carduri dedicate.
- * FAB-ul de power este pozitionat floating la baza ecranului si isi schimba culoarea:
- * teal (Primary) cand AC-ul este pornit, gri (SurfaceVariant) cand este oprit.
+ * Ecranul principal de control al aparatului de aer conditionat — wrapper subtire peste
+ * ViewModel. Colecteaza toate starile din [AcControlViewModel] si le paseaza catre
+ * [AcControlScreenContent], care contine tot UI-ul si nu depinde de ViewModel (poate fi
+ * randat direct in @Preview).
  *
  * @param navController pentru butonul de intoarcere
  * @param device datele dispozitivului (nume si camera)
@@ -59,7 +62,7 @@ fun AcControlScreen(
 ) {
     val app = LocalContext.current.applicationContext as Application
     val viewModel: AcControlViewModel = viewModel(
-        factory = AcControlViewModel.Factory(app, deviceId)
+        factory = AcControlViewModel.Factory(app, deviceId, device.last_status)
     )
     val isOn by viewModel.isOn.collectAsState()
     val temperature by viewModel.temperature.collectAsState()
@@ -67,13 +70,52 @@ fun AcControlScreen(
     val fanSpeed by viewModel.fanSpeed.collectAsState()
     val swingEnabled by viewModel.swingEnabled.collectAsState()
     val timerHours by viewModel.timerHours.collectAsState()
-    val error by viewModel.error.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(error) {
-        error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
-    }
+    AcControlScreenContent(
+        device = device,
+        isOn = isOn,
+        temperature = temperature,
+        mode = mode,
+        fanSpeed = fanSpeed,
+        swingEnabled = swingEnabled,
+        timerHours = timerHours,
+        onBack = { navController.popBackStack() },
+        onTogglePower = { viewModel.togglePower() },
+        onIncreaseTemperature = { viewModel.increaseTemperature() },
+        onDecreaseTemperature = { viewModel.decreaseTemperature() },
+        onModeSelected = { viewModel.setMode(it) },
+        onFanSpeedSelected = { viewModel.setFanSpeed(it) },
+        onToggleSwing = { viewModel.toggleSwing() },
+        onSetTimer = { viewModel.setTimer(it) }
+    )
+}
 
+/**
+ * UI-ul ecranului de control al aparatului de aer conditionat, fara dependinta de ViewModel.
+ * Primeste toata starea ca parametri simpli, ceea ce permite randare in @Preview fara
+ * apeluri de retea.
+ *
+ * FAB-ul de power este pozitionat floating la baza ecranului si isi schimba culoarea:
+ * teal (Primary) cand AC-ul este pornit, gri (SurfaceVariant) cand este oprit.
+ */
+@Composable
+fun AcControlScreenContent(
+    device: DeviceResponse,
+    isOn: Boolean,
+    temperature: Int,
+    mode: AcMode,
+    fanSpeed: FanSpeed,
+    swingEnabled: Boolean,
+    timerHours: Int,
+    onBack: () -> Unit,
+    onTogglePower: () -> Unit,
+    onIncreaseTemperature: () -> Unit,
+    onDecreaseTemperature: () -> Unit,
+    onModeSelected: (AcMode) -> Unit,
+    onFanSpeedSelected: (FanSpeed) -> Unit,
+    onToggleSwing: () -> Unit,
+    onSetTimer: (Int) -> Unit
+) {
     // Mapare viteza ventilator -> progres bara liniara (LOW=25%, MED=50%, HIGH=75%, AUTO=100%)
     val fanSpeeds = FanSpeed.values()
     val fanSpeedProgress = mapOf(
@@ -84,8 +126,7 @@ fun AcControlScreen(
     )
 
     Scaffold(
-        containerColor = Background,
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        containerColor = Background
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -103,10 +144,10 @@ fun AcControlScreen(
                     .padding(horizontal = 8.dp, vertical = 12.dp)
             ) {
                 IconButton(
-                    onClick = { navController.popBackStack() },
+                    onClick = onBack,
                     modifier = Modifier.align(Alignment.CenterStart)
                 ) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = OnSurface)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = OnSurface)
                 }
                 Column(modifier = Modifier.align(Alignment.Center)) {
                     Text(
@@ -116,7 +157,7 @@ fun AcControlScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = device.room,
+                        text = device.room ?: "",
                         color = OnSurface,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -155,7 +196,7 @@ fun AcControlScreen(
                                     .size(40.dp)
                                     .clip(CircleShape)
                                     .background(SurfaceVariant)
-                                    .clickable { viewModel.decreaseTemperature() },
+                                    .clickable { onDecreaseTemperature() },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = OnBackground, modifier = Modifier.size(20.dp))
@@ -165,7 +206,7 @@ fun AcControlScreen(
                                     .size(40.dp)
                                     .clip(CircleShape)
                                     .background(SurfaceVariant)
-                                    .clickable { viewModel.increaseTemperature() },
+                                    .clickable { onIncreaseTemperature() },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = "Increase", tint = OnBackground, modifier = Modifier.size(20.dp))
@@ -182,7 +223,7 @@ fun AcControlScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Mode", color = OnSurface, style = MaterialTheme.typography.labelMedium)
-                        ModeSelector(selectedMode = mode, onModeSelected = viewModel::setMode)
+                        ModeSelector(selectedMode = mode, onModeSelected = onModeSelected)
                     }
                 }
 
@@ -236,7 +277,7 @@ fun AcControlScreen(
                                             if (isSelected) Primary else Color.Transparent,
                                             RoundedCornerShape(10.dp)
                                         )
-                                        .clickable { viewModel.setFanSpeed(speed) },
+                                        .clickable { onFanSpeedSelected(speed) },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
@@ -280,7 +321,7 @@ fun AcControlScreen(
                             }
                             Switch(
                                 checked = swingEnabled,
-                                onCheckedChange = { viewModel.toggleSwing() },
+                                onCheckedChange = { onToggleSwing() },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.White,
                                     checkedTrackColor = Primary,
@@ -310,13 +351,13 @@ fun AcControlScreen(
                                 )
                                 Column {
                                     IconButton(
-                                        onClick = { viewModel.setTimer(timerHours + 1) },
+                                        onClick = { onSetTimer(timerHours + 1) },
                                         modifier = Modifier.size(28.dp)
                                     ) {
                                         Icon(Icons.Default.KeyboardArrowUp, contentDescription = "+1h", tint = Primary, modifier = Modifier.size(18.dp))
                                     }
                                     IconButton(
-                                        onClick = { if (timerHours > 0) viewModel.setTimer(timerHours - 1) },
+                                        onClick = { if (timerHours > 0) onSetTimer(timerHours - 1) },
                                         modifier = Modifier.size(28.dp)
                                     ) {
                                         Icon(Icons.Default.KeyboardArrowDown, contentDescription = "-1h", tint = OnSurface, modifier = Modifier.size(18.dp))
@@ -334,10 +375,10 @@ fun AcControlScreen(
         // ── Power FAB ────────────────────────────────────────────────────────
         // Buton flotant circular pozitionat la baza ecranului (BottomCenter).
         // Culoarea se schimba dinamic: Primary (teal) cand AC-ul e pornit,
-        // SurfaceVariant (gri) cand AC-ul e oprit. Apeleaza viewModel.togglePower().
+        // SurfaceVariant (gri) cand AC-ul e oprit. Apeleaza onTogglePower().
         Box(modifier = Modifier.fillMaxSize()) {
             FloatingActionButton(
-                onClick = { viewModel.togglePower() },
+                onClick = onTogglePower,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = innerPadding.calculateBottomPadding() + 24.dp),
@@ -348,5 +389,69 @@ fun AcControlScreen(
                 Icon(Icons.Default.PowerSettingsNew, contentDescription = "Power", modifier = Modifier.size(28.dp))
             }
         }
+    }
+}
+
+private val previewAcDevice = DeviceResponse(
+    id = 3,
+    name = "Bedroom AC",
+    device_type = "ir_ac",
+    room = "Bedroom",
+    room_id = 2,
+    mqtt_topic = null,
+    is_online = true,
+    last_status = "on",
+    mac_address = null,
+    ir_codes = null,
+    ir_remote_type = null,
+    owner_id = 1,
+    created_at = "2026-01-01T00:00:00"
+)
+
+@Preview(showBackground = true)
+@Composable
+fun AcControlScreenOnPreview() {
+    SmartHomeTheme {
+        AcControlScreenContent(
+            device = previewAcDevice,
+            isOn = true,
+            temperature = 22,
+            mode = AcMode.COOL,
+            fanSpeed = FanSpeed.AUTO,
+            swingEnabled = true,
+            timerHours = 2,
+            onBack = {},
+            onTogglePower = {},
+            onIncreaseTemperature = {},
+            onDecreaseTemperature = {},
+            onModeSelected = {},
+            onFanSpeedSelected = {},
+            onToggleSwing = {},
+            onSetTimer = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun AcControlScreenOffPreview() {
+    SmartHomeTheme {
+        AcControlScreenContent(
+            device = previewAcDevice.copy(is_online = false, last_status = "off"),
+            isOn = false,
+            temperature = 22,
+            mode = AcMode.COOL,
+            fanSpeed = FanSpeed.AUTO,
+            swingEnabled = false,
+            timerHours = 0,
+            onBack = {},
+            onTogglePower = {},
+            onIncreaseTemperature = {},
+            onDecreaseTemperature = {},
+            onModeSelected = {},
+            onFanSpeedSelected = {},
+            onToggleSwing = {},
+            onSetTimer = {}
+        )
     }
 }

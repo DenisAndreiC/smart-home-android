@@ -22,6 +22,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
+ * Sealed class representing all possible states of the forgot-password flow.
+ */
+sealed class ForgotPasswordState {
+    object Idle    : ForgotPasswordState()
+    object Loading : ForgotPasswordState()
+    object Success : ForgotPasswordState()
+    data class Error(val message: String) : ForgotPasswordState()
+}
+
+/**
  * Sealed class ce reprezinta toate starile posibile ale procesului de autentificare.
  *
  * - [Idle]: starea initiala, nicio operatie in curs
@@ -48,9 +58,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     val tokenManager = TokenManager(application)
     private val repository = AuthRepository(RetrofitClient.apiService, tokenManager)
 
-    // Starea curenta a autentificarii, expusa ca flux imutabil catre UI
+    // Current authentication state exposed as an immutable flow to the UI
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
+
+    // Forgot-password flow state
+    private val _forgotPasswordState = MutableStateFlow<ForgotPasswordState>(ForgotPasswordState.Idle)
+    val forgotPasswordState: StateFlow<ForgotPasswordState> = _forgotPasswordState.asStateFlow()
 
     /**
      * Initiaza procesul de login cu email si parola.
@@ -102,5 +116,27 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun resetState() {
         _authState.value = AuthState.Idle
+    }
+
+    /**
+     * Sends POST /auth/forgot-password with the provided email.
+     * On success the server sends a reset-link email to the user.
+     */
+    fun forgotPassword(email: String) {
+        if (email.isBlank()) {
+            _forgotPasswordState.value = ForgotPasswordState.Error("Please enter your email")
+            return
+        }
+        viewModelScope.launch {
+            _forgotPasswordState.value = ForgotPasswordState.Loading
+            repository.forgotPassword(email)
+                .onSuccess { _forgotPasswordState.value = ForgotPasswordState.Success }
+                .onFailure { _forgotPasswordState.value = ForgotPasswordState.Error(it.message ?: "Error") }
+        }
+    }
+
+    /** Resets the forgot-password state back to Idle. */
+    fun resetForgotPasswordState() {
+        _forgotPasswordState.value = ForgotPasswordState.Idle
     }
 }

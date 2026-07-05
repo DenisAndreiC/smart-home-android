@@ -11,10 +11,13 @@
 package com.denis.smarthome.viewmodel
 
 import android.app.Application
+import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.denis.smarthome.data.api.RetrofitClient
 import com.denis.smarthome.data.local.TokenManager
+import com.denis.smarthome.data.model.MLSettingsRequest
 import com.denis.smarthome.data.repository.AuthRepository
 import com.denis.smarthome.ui.theme.ThemeState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +25,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -43,9 +49,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _userName = MutableStateFlow("")
     val userName: StateFlow<String> = _userName.asStateFlow()
 
-    // Email-ul utilizatorului autentificat
+    // User email
     private val _userEmail = MutableStateFlow("")
     val userEmail: StateFlow<String> = _userEmail.asStateFlow()
+
+    // Avatar URL returned by the server after a successful upload
+    private val _avatarUrl = MutableStateFlow<String?>(null)
+    val avatarUrl: StateFlow<String?> = _avatarUrl.asStateFlow()
+
+    // True while an avatar upload is in progress
+    private val _isUploadingAvatar = MutableStateFlow(false)
+    val isUploadingAvatar: StateFlow<Boolean> = _isUploadingAvatar.asStateFlow()
 
     /**
      * Starea conexiunii cu serverul FastAPI.
@@ -74,12 +88,33 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _lastSyncTime = MutableStateFlow("--:--")
     val lastSyncTime: StateFlow<String> = _lastSyncTime.asStateFlow()
 
+    // Email verification status loaded from /auth/me
+    private val _isVerified = MutableStateFlow(false)
+    val isVerified: StateFlow<Boolean> = _isVerified.asStateFlow()
+
+    // Minimum occurrences for ML pattern detection (3-20, default 5)
+    private val _mlMinOccurrences = MutableStateFlow(5)
+    val mlMinOccurrences: StateFlow<Int> = _mlMinOccurrences.asStateFlow()
+
+    // Minimum distinct days for ML pattern detection (2-7, default 4)
+    private val _mlMinDays = MutableStateFlow(4)
+    val mlMinDays: StateFlow<Int> = _mlMinDays.asStateFlow()
+
+    // True after a resend-verification email is successfully sent
+    private val _verificationSent = MutableStateFlow(false)
+    val verificationSent: StateFlow<Boolean> = _verificationSent.asStateFlow()
+
+    // Non-null when resendVerification() or any settings call fails — shown as snackbar
+    private val _settingsError = MutableStateFlow<String?>(null)
+    val settingsError: StateFlow<String?> = _settingsError.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     init {
         loadUserInfo()
-        // Sincronizeaza starea initiala cu valoarea persistata in DataStore
+        loadMLSettings()
+        // Sync initial theme state with persisted DataStore value
         viewModelScope.launch {
             val saved = tokenManager.getTheme().firstOrNull() ?: true
             ThemeState.isDark = saved
@@ -100,9 +135,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             _isLoading.value = true
             authRepo.getMe()
                 .onSuccess {
-                    _userName.value = it.username
+                    _userName.value = it.display_name?.takeIf { n -> n.isNotBlank() } ?: it.username
                     _userEmail.value = it.email
-                    // Conexiunea cu serverul este confirmata - cererea a reusit
+                    _avatarUrl.value = it.avatar_url?.takeIf { u -> u.isNotBlank() }
+                    _isVerified.value = it.is_verified
+                    // Server connection confirmed — request succeeded
                     _isServerConnected.value = true
                     // Inregistram ora sincronizarii in format HH:mm (ex: "14:35")
                     _lastSyncTime.value = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
@@ -140,7 +177,129 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
      * si redirectioneaza automat la ecranul de Login.
      */
     fun logout() {
-        // clearToken() sterge intrarea din DataStore Preferences; e o operatie suspendata
         viewModelScope.launch { authRepo.logout() }
+    }
+
+    /**
+     * Sends PUT /api/users/me with the new display_name, then re-fetches the profile.
+     */
+    fun updateUsername(newDisplayName: String) {
+        viewModelScope.launch {
+            authRepo.updateUser(newDisplayName)
+                .onSuccess {
+                    _userName.value = it.display_name?.takeIf { n -> n.isNotBlank() } ?: it.username
+                    loadUserInfo()
+                }
+        }
+    }
+
+    /**
+     * Loads ML pattern detection settings from GET /ml/settings.
+     */
+    fun loadMLSettings() {
+        viewModelScope.launch {
+            Log.d("SettingsVM", "loadMLSettings: fetching GET /ml/settings")
+            runCatching { RetrofitClient.apiService.getMLSettings() }
+                .onSuccess {
+                    Log.d("SettingsVM", "loadMLSettings: min_occurrences=${it.min_occurrences} min_days=${it.min_days}")
+                    _mlMinOccurrences.value = it.min_occurrences
+                    _mlMinDays.value = it.min_days
+                }
+                .onFailure {
+                    Log.e("SettingsVM", "loadMLSettings failed: ${it.message}", it)
+                }
+        }
+    }
+
+    /**
+     * Updates the minimum pattern occurrences threshold via POST /ml/settings.
+     * Sends both fields together so the backend persists the full settings object.
+     */
+    fun updateMLMinOccurrences(value: Int) {
+        _mlMinOccurrences.value = value
+        viewModelScope.launch {
+            Log.d("SettingsVM", "updateMLMinOccurrences: value=$value min_days=${_mlMinDays.value}")
+            runCatching {
+                RetrofitClient.apiService.updateMLSettings(
+                    MLSettingsRequest(min_occurrences = value, min_days = _mlMinDays.value)
+                )
+            }.onSuccess {
+                Log.d("SettingsVM", "updateMLMinOccurrences: saved min_occurrences=${it.min_occurrences} min_days=${it.min_days}")
+                _mlMinOccurrences.value = it.min_occurrences
+                _mlMinDays.value = it.min_days
+            }.onFailure {
+                Log.e("SettingsVM", "updateMLMinOccurrences failed: ${it.message}", it)
+            }
+        }
+    }
+
+    /**
+     * Updates the minimum distinct days threshold via POST /ml/settings.
+     * Sends both fields together so the backend persists the full settings object.
+     */
+    fun updateMLMinDays(days: Int) {
+        _mlMinDays.value = days
+        viewModelScope.launch {
+            Log.d("SettingsVM", "updateMLMinDays: days=$days min_occurrences=${_mlMinOccurrences.value}")
+            runCatching {
+                RetrofitClient.apiService.updateMLSettings(
+                    MLSettingsRequest(min_occurrences = _mlMinOccurrences.value, min_days = days)
+                )
+            }.onSuccess {
+                Log.d("SettingsVM", "updateMLMinDays: saved min_occurrences=${it.min_occurrences} min_days=${it.min_days}")
+                _mlMinOccurrences.value = it.min_occurrences
+                _mlMinDays.value = it.min_days
+            }.onFailure {
+                Log.e("SettingsVM", "updateMLMinDays failed: ${it.message}", it)
+            }
+        }
+    }
+
+    /**
+     * Sends POST /auth/resend-verification and sets verificationSent on success.
+     * On failure, exposes the error via settingsError so the UI can show a snackbar.
+     */
+    fun resendVerification() {
+        Log.d("SettingsVM", "resendVerification: calling POST auth/resend-verification")
+        viewModelScope.launch {
+            runCatching { RetrofitClient.apiService.resendVerification() }
+                .onSuccess {
+                    Log.d("SettingsVM", "resendVerification: success — ${it.message}")
+                    _verificationSent.value = true
+                }
+                .onFailure {
+                    Log.e("SettingsVM", "resendVerification failed: ${it.message}", it)
+                    _settingsError.value = "Failed to send verification email: ${it.message}"
+                }
+        }
+    }
+
+    fun clearSettingsError() { _settingsError.value = null }
+
+    /**
+     * Picks the image at [uri] from the content provider, converts it to a multipart body,
+     * and uploads it via POST /api/users/me/avatar.
+     * On success the returned avatar_url is stored in [avatarUrl].
+     */
+    fun uploadAvatar(uri: Uri) {
+        viewModelScope.launch {
+            _isUploadingAvatar.value = true
+            runCatching {
+                val cr = getApplication<Application>().contentResolver
+                val mimeType = cr.getType(uri) ?: "image/jpeg"
+                val bytes = cr.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching
+                val requestBody = bytes.toRequestBody(mimeType.toMediaType())
+                val extension = if (mimeType.contains("png")) "png" else "jpg"
+                // Numele campului trebuie sa fie "file" — asa e definit parametrul
+                // in FastAPI (async def upload_avatar(file: UploadFile = File(...))).
+                val part = MultipartBody.Part.createFormData("file", "avatar.$extension", requestBody)
+                authRepo.uploadAvatar(part)
+                    .onSuccess { user ->
+                        _avatarUrl.value = user.avatar_url?.takeIf { it.isNotBlank() }
+                        user.display_name?.takeIf { it.isNotBlank() }?.let { _userName.value = it }
+                    }
+            }
+            _isUploadingAvatar.value = false
+        }
     }
 }

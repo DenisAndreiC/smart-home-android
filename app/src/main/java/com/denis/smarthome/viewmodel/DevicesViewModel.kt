@@ -47,7 +47,9 @@ data class AddDeviceFormState(
     val name: String = "",
     val deviceType: String = "relay",
     val room: String = "",
-    val mqttTopic: String = "smarthome/devices/"
+    val mqttTopic: String = "smarthome/devices/relay/command",
+    val brand: String = "",
+    val remoteType: String = "44-key"
 )
 
 /**
@@ -85,7 +87,7 @@ class DevicesViewModel(application: Application) : AndroidViewModel(application)
         when (filter) {
             DeviceFilter.ALL -> devices
             // Comparatie case-insensitive pentru robustete
-            DeviceFilter.IR -> devices.filter { it.device_type.lowercase() == "ir" }
+            DeviceFilter.IR -> devices.filter { it.device_type.lowercase().startsWith("ir") }
             DeviceFilter.RELAY -> devices.filter { it.device_type.lowercase() == "relay" }
             // Daca filtrul este ROOM dar nu e selectata o camera, returnam toate dispozitivele
             DeviceFilter.ROOM -> room?.let { r -> devices.filter { it.room == r } } ?: devices
@@ -99,7 +101,7 @@ class DevicesViewModel(application: Application) : AndroidViewModel(application)
      * si sortarea — fara apel API suplimentar.
      */
     val rooms: StateFlow<List<String>> = _allDevices
-        .map { devices -> devices.map { it.room }.distinct().sorted() }
+        .map { devices -> devices.mapNotNull { it.room }.distinct().sorted() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _isLoading = MutableStateFlow(false)
@@ -161,19 +163,19 @@ class DevicesViewModel(application: Application) : AndroidViewModel(application)
     fun toggleDevice(deviceId: Int, isOn: Boolean) {
         // Optimistic update: actualizam UI inainte de confirmarea API
         _allDevices.value = _allDevices.value.map {
-            if (it.id == deviceId) it.copy(is_active = isOn) else it
+            if (it.id == deviceId) it.copy(is_online = isOn, last_status = if (isOn) "on" else "off") else it
         }
         viewModelScope.launch {
             repository.sendCommand(
                 CommandRequest(
                     device_id = deviceId,
-                    command_type = "power",
-                    command_data = if (isOn) "on" else "off"
+                    action = "power",
+                    value = if (isOn) "on" else "off"
                 )
             ).onFailure {
                 // Revert on failure: restauram starea anterioara daca API-ul refuza comanda
                 _allDevices.value = _allDevices.value.map { device ->
-                    if (device.id == deviceId) device.copy(is_active = !isOn) else device
+                    if (device.id == deviceId) device.copy(is_online = !isOn, last_status = if (!isOn) "on" else "off") else device
                 }
                 _error.value = it.message
             }
@@ -202,18 +204,28 @@ class DevicesViewModel(application: Application) : AndroidViewModel(application)
     fun addDevice() {
         val form = _addForm.value
         if (form.name.isBlank()) { _error.value = "Device name required"; return }
+        val isIr = form.deviceType.startsWith("ir")
+        val mqtt = if (isIr) "smarthome/devices/ir/command" else "smarthome/devices/relay/command"
+        val irCodes = if (isIr && form.brand.isNotBlank())
+            mapOf("brand" to form.brand.lowercase()) else null
+        val irRemoteType = if (form.deviceType == "ir_rgb" && form.remoteType.isNotBlank())
+            form.remoteType.substringBefore("-") else null
         viewModelScope.launch {
             repository.createDevice(
                 DeviceRequest(
                     name = form.name,
                     device_type = form.deviceType,
                     room = form.room.ifBlank { "Default" },
-                    // Generam topic MQTT automat daca utilizatorul nu l-a completat
-                    mqtt_topic = form.mqttTopic.ifBlank { "smarthome/devices/${form.name.lowercase().replace(" ", "_")}" }
+                    mqtt_topic = mqtt,
+                    ir_codes = irCodes,
+                    ir_remote_type = irRemoteType
                 )
             ).onSuccess {
+                if (form.deviceType == "ir_tv" && form.brand.isNotBlank()) {
+                    repository.setBrand(form.brand.lowercase())
+                }
                 hideAddDialog()
-                loadDevices() // Reincarcam lista pentru a afisa noul dispozitiv
+                loadDevices()
             }.onFailure { _error.value = it.message }
         }
     }

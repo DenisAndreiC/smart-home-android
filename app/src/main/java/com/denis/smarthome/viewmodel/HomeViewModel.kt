@@ -4,6 +4,7 @@
  * Incarca statisticile generale ale sistemului, informatiile utilizatorului
  * si lista de camere derivata din dispozitivele active.
  * Calculeaza salutul si data curenta dinamic, in functie de ora si locale.
+ * Expune actiunile rapide allOff() si awayMode() cu feedback prin snackbar.
  *
  * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
  * Autor: Denis Andrei C.
@@ -15,7 +16,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.denis.smarthome.data.api.RetrofitClient
 import com.denis.smarthome.data.local.TokenManager
+import com.denis.smarthome.data.model.AnomalyItem
 import com.denis.smarthome.data.model.DashboardStats
+import com.denis.smarthome.data.model.RoutineCandidate
+import com.denis.smarthome.data.model.SceneResponse
 import com.denis.smarthome.data.model.UserResponse
 import com.denis.smarthome.data.repository.AuthRepository
 import com.denis.smarthome.data.repository.DashboardRepository
@@ -35,7 +39,7 @@ import java.util.*
  *
  * @param name numele camerei (ex: "Living", "Bedroom")
  * @param deviceCount numarul total de dispozitive din camera
- * @param activeCount numarul de dispozitive active (is_active == true) din camera
+ * @param activeCount numarul de dispozitive active din camera
  */
 data class RoomInfo(
     val name: String,
@@ -49,6 +53,9 @@ data class RoomInfo(
  * Agrega date din trei repository-uri: dashboard stats, lista de dispozitive si profil user.
  * Lista de camere ([rooms]) nu vine direct din API, ci este construita prin groupBy pe lista
  * de dispozitive, extragand camerele unice si numarand dispozitivele active per camera.
+ *
+ * Numarul de notificari necitite ([unreadNotificationCount]) este incarcat la fiecare
+ * refresh si afisat pe badge-ul clopotelului din header.
  */
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -72,34 +79,54 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _unreadNotificationCount = MutableStateFlow(0)
+    val unreadNotificationCount: StateFlow<Int> = _unreadNotificationCount.asStateFlow()
+
+    // User scenes loaded from GET /api/scenes/ — shown as Quick Action chips in dashboard
+    private val _scenes = MutableStateFlow<List<SceneResponse>>(emptyList())
+    val scenes: StateFlow<List<SceneResponse>> = _scenes.asStateFlow()
+
+    // ID of scene currently executing — used for chip loading state
+    private val _executingSceneId = MutableStateFlow<Int?>(null)
+    val executingSceneId: StateFlow<Int?> = _executingSceneId.asStateFlow()
+
+    // ML routine recommendations from GET /ml/recommendations
+    private val _recommendations = MutableStateFlow<List<RoutineCandidate>>(emptyList())
+    val recommendations: StateFlow<List<RoutineCandidate>> = _recommendations.asStateFlow()
+
+    // Dismissed recommendation device_ids+actions stored locally so they don't reappear
+    private val _dismissedKeys = MutableStateFlow<Set<String>>(emptySet())
+
+    // ML anomalies from GET /ml/anomalies — shown as a warning banner
+    private val _anomalies = MutableStateFlow<List<AnomalyItem>>(emptyList())
+    val anomalies: StateFlow<List<AnomalyItem>> = _anomalies.asStateFlow()
+
     /**
      * Salut dinamic calculat in functie de ora curenta din [Calendar].
      *
-     * 5-11 → dimineata, 12-17 → zi, altfel → seara.
+     * 5-11 -> morning, 12-17 -> afternoon, altfel -> evening.
      * Recalculat la fiecare acces (proprietate fara backing field).
      */
     val greeting: String
         get() {
-            // Citim ora curenta a zilei din Calendar pentru a alege salutul potrivit
             val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
             return when (hour) {
-                in 5..11 -> "Buna dimineata"
-                in 12..17 -> "Buna ziua"
-                else -> "Buna seara"
+                in 5..11 -> "Good morning"
+                in 12..17 -> "Good afternoon"
+                else -> "Good evening"
             }
         }
 
     /**
-     * Data curenta formatata in romana (ex: "Luni, 3 Martie").
+     * Data curenta formatata in engleza (ex: "Monday, March 17").
      *
-     * Foloseste [SimpleDateFormat] cu Locale("ro", "RO") pentru numele zilei
-     * si lunii in limba romana. Prima litera este transformata in majuscula.
+     * Foloseste [SimpleDateFormat] cu [Locale.ENGLISH] pentru consistenta
+     * cu restul interfetei in engleza.
      */
     val currentDate: String
         get() {
-            // Formatul "EEEE, d MMMM" produce ex: "luni, 3 martie" -> capitalizam prima litera
-            val format = SimpleDateFormat("EEEE, d MMMM", Locale("ro", "RO"))
-            return format.format(Date()).replaceFirstChar { it.uppercase() }
+            val format = SimpleDateFormat("EEEE, MMMM d", Locale.ENGLISH)
+            return format.format(Date())
         }
 
     init {
@@ -110,8 +137,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Incarca toate datele necesare dashboard-ului intr-un singur bloc.
      *
-     * Apeleaza in paralel: getMe() pentru profil, getStats() pentru statistici
-     * si getDevices() pentru constructia listei de camere prin groupBy.
+     * Apeleaza in secventa: getMe() pentru profil, getStats() pentru statistici,
+     * getDevices() pentru camere si calcul energie, getNotifications() pentru badge.
      */
     fun loadDashboard() {
         viewModelScope.launch {
@@ -122,22 +149,130 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             dashboardRepo.getStats().onSuccess { _stats.value = it }
                 .onFailure { _error.value = it.message }
 
-            // Construim lista RoomInfo din dispozitive: groupBy room → map la RoomInfo
-            // Nu exista endpoint /rooms, deci derivam camerele din lista de dispozitive
             deviceRepo.getDevices().onSuccess { devices ->
+                // Construim lista RoomInfo din dispozitive: groupBy room -> map la RoomInfo
                 _rooms.value = devices
                     .groupBy { it.room }
                     .map { (room, devs) ->
                         RoomInfo(
-                            name = room,
+                            name = room ?: "Unknown",
                             deviceCount = devs.size,
-                            // Numaram doar dispozitivele cu is_active == true
-                            activeCount = devs.count { it.is_active }
+                            activeCount = devs.count { it.is_online }
                         )
                     }
             }
 
+            // Numarul de notificari necitite pentru badge-ul clopotelului din header
+            runCatching { RetrofitClient.apiService.getNotifications() }
+                .onSuccess { notifications ->
+                    _unreadNotificationCount.value = notifications.count { !it.is_read }
+                }
+
+            // Load user scenes for Quick Actions chips
+            runCatching { RetrofitClient.apiService.getScenes() }
+                .onSuccess { _scenes.value = it }
+
+            // Load ML routine recommendations; filter out already-dismissed ones.
+            // min_occurrences/min_distinct_days sunt trimise explicit din Settings, ca
+            // dashboard-ul sa arate exact aceeasi lista ca dialogul "Select Routines to
+            // Create" din Scenes pentru aceleasi valori de slider.
+            val mlSettings = runCatching { RetrofitClient.apiService.getMLSettings() }.getOrNull()
+            runCatching {
+                RetrofitClient.apiService.getRecommendations(
+                    minOccurrences = mlSettings?.min_occurrences,
+                    minDistinctDays = mlSettings?.min_days
+                )
+            }
+                .onSuccess { response ->
+                    val dismissed = _dismissedKeys.value
+                    _recommendations.value = response.recommendations
+                        .filter { r -> "${r.device_id}:${r.action}:${r.value}" !in dismissed }
+                        .take(3)
+                }
+
+            // Load ML anomalies for the warning banner
+            runCatching { RetrofitClient.apiService.getAnomalies() }
+                .onSuccess { _anomalies.value = it.anomalies }
+
             _isLoading.value = false
+        }
+    }
+
+    /**
+     * Removes a recommendation from the visible list by adding its key to the dismissed set.
+     * Dismissed recommendations survive a dashboard refresh within the same session.
+     */
+    fun dismissRecommendation(recommendation: RoutineCandidate) {
+        val key = "${recommendation.device_id}:${recommendation.action}:${recommendation.value}"
+        _dismissedKeys.value = _dismissedKeys.value + key
+        _recommendations.value = _recommendations.value.filter { r ->
+            "${r.device_id}:${r.action}:${r.value}" != key
+        }
+    }
+
+    /**
+     * Creates a Routine from a dashboard ML recommendation via POST /api/routines/.
+     * This must create a Routine (not a Scene) so it shows up in the Routines tab, not
+     * the Scenes tab. /ml/recommendations now returns the same detect_routines() shape
+     * as /routines/detect (unified backend function), so trigger_time/days_of_week/value/name
+     * come directly from the recommendation instead of being guessed/defaulted.
+     */
+    fun createRoutineFromRecommendation(recommendation: RoutineCandidate) {
+        viewModelScope.launch {
+            runCatching {
+                val request = com.denis.smarthome.data.model.RoutineCreate(
+                    name = recommendation.name,
+                    device_id = recommendation.device_id,
+                    action = recommendation.action,
+                    value = recommendation.value,
+                    trigger_time = recommendation.trigger_time,
+                    days_of_week = recommendation.days_of_week
+                )
+                RetrofitClient.apiService.createRoutine(request)
+            }.onSuccess {
+                dismissRecommendation(recommendation)
+            }.onFailure { _error.value = it.message }
+        }
+    }
+
+    /**
+     * Trimite comanda POST /devices/all-off si afiseaza snackbar cu rezultatul.
+     *
+     * La succes: "All devices turned off". La eroare: mesajul de la API.
+     */
+    fun allOff() {
+        viewModelScope.launch {
+            deviceRepo.allOff()
+                .onFailure { _error.value = it.message }
+        }
+    }
+
+    /**
+     * Trimite comanda POST /devices/away-mode si afiseaza snackbar cu rezultatul.
+     *
+     * La succes: "Away mode activated". La eroare: mesajul de la API.
+     */
+    fun awayMode() {
+        viewModelScope.launch {
+            deviceRepo.awayMode()
+                .onFailure { _error.value = it.message }
+        }
+    }
+
+    /**
+     * Executes a scene via POST /api/scenes/{id}/execute and shows snackbar result.
+     *
+     * Sets [_executingSceneId] while the request is in flight so the chip can show
+     * a loading state, then clears it regardless of success or failure.
+     *
+     * @param id scene ID to execute
+     */
+    fun executeQuickScene(id: Int) {
+        viewModelScope.launch {
+            _executingSceneId.value = id
+            runCatching { RetrofitClient.apiService.executeScene(id) }
+                .onFailure { _error.value = it.message }
+            _executingSceneId.value = null
         }
     }
 }

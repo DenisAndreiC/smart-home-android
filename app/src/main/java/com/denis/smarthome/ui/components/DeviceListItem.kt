@@ -19,7 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,13 +42,22 @@ import com.denis.smarthome.ui.theme.*
  * @param name Numele dispozitivului introdus de utilizator
  * @return Iconita [ImageVector] corespunzatoare
  */
+private fun deviceTypeLabel(deviceType: String): String = when (deviceType) {
+    "ir_tv"  -> "TV Remote"
+    "ir_ac"  -> "Air Conditioner"
+    "ir_rgb" -> "RGB Bulb"
+    "relay"  -> "Smart Relay"
+    "wol"    -> "Wake on LAN"
+    else     -> deviceType
+}
+
 private fun deviceIcon(deviceType: String, name: String): ImageVector {
     val type = deviceType.lowercase()
     val nameLower = name.lowercase()
     return when {
-        type == "tv" || nameLower.contains("tv") || nameLower.contains("television") -> Icons.Default.Tv
-        type == "ac" || nameLower.contains("air") || nameLower.contains("ac") -> Icons.Default.AcUnit
-        nameLower.contains("light") || nameLower.contains("bulb") || nameLower.contains("lamp") -> Icons.Default.Lightbulb
+        type == "ir_tv" || type == "tv" || nameLower.contains("tv") || nameLower.contains("television") -> Icons.Default.Tv
+        type == "ir_ac" || type == "ac" || nameLower.contains("air") || nameLower.contains("ac") -> Icons.Default.AcUnit
+        type == "ir_rgb" || nameLower.contains("rgb") || nameLower.contains("light") || nameLower.contains("bulb") || nameLower.contains("lamp") -> Icons.Default.Lightbulb
         nameLower.contains("fan") -> Icons.Default.Air
         nameLower.contains("coffee") -> Icons.Default.LocalCafe
         else -> Icons.Default.Devices
@@ -56,23 +65,25 @@ private fun deviceIcon(deviceType: String, name: String): ImageVector {
 }
 
 /**
- * Card pentru un dispozitiv din lista cu iconita, info si switch de control.
+ * Card pentru un dispozitiv din lista cu iconita si info.
  *
  * Click-ul pe card navigheaza la ecranul de control al dispozitivului.
- * Switch-ul M3 isi consuma propriul eveniment de click si nu il propaga la card.
+ * Controlul ON/OFF se face din ecranul individual al fiecarui dispozitiv,
+ * nu din dashboard — pentru a evita desincronizarea starii.
  *
  * @param device Datele dispozitivului primite din API
- * @param onToggle Callback apelat cand utilizatorul schimba starea switch-ului
  * @param onClick Callback apelat la click pe intreaga linie (navigare la control)
  * @param modifier Modifier optional pentru stilizare externa
  */
 @Composable
 fun DeviceListItem(
     device: DeviceResponse,
-    onToggle: (Boolean) -> Unit,
     onClick: () -> Unit,
+    onDelete: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Surface),
@@ -83,7 +94,7 @@ fun DeviceListItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onClick)
-                .padding(14.dp),
+                .padding(start = 14.dp, top = 14.dp, bottom = 14.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Iconita dispozitivului selectata dinamic de deviceIcon()
@@ -120,15 +131,13 @@ fun DeviceListItem(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(
-                                if (device.is_active) Color(0xFF4CAF50) else ErrorColor
-                            )
+                            .background(if (device.is_online) Color(0xFF4CAF50) else ErrorColor)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text = "${device.room} • ${if (device.is_active) "Online" else "Offline"}",
+                    text = "${device.room ?: ""} • ${deviceTypeLabel(device.device_type)}",
                     color = OnSurface,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -142,19 +151,33 @@ fun DeviceListItem(
                 )
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Switch M3 pentru pornire/oprire; isi consuma propriul click, nu propaga la card
-            Switch(
-                checked = device.is_active,
-                onCheckedChange = onToggle,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = Primary,
-                    uncheckedThumbColor = OnSurface,
-                    uncheckedTrackColor = SurfaceVariant
-                )
-            )
+            // Buton meniu (3 puncte) — deschide dropdown cu optiunea Delete
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "More options",
+                        tint = OnSurface,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                    modifier = Modifier.background(Surface)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Delete", color = ErrorColor) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Delete, contentDescription = null, tint = ErrorColor)
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onDelete?.invoke()
+                        }
+                    )
+                }
+            }
         }
     }
 }
