@@ -186,7 +186,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 .onSuccess { response ->
                     val dismissed = _dismissedKeys.value
                     _recommendations.value = response.recommendations
-                        .filter { r -> "${r.device_id}:${r.action}" !in dismissed }
+                        .filter { r -> "${r.device_id}:${r.action}:${r.value}" !in dismissed }
                         .take(3)
                 }
 
@@ -203,10 +203,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * Dismissed recommendations survive a dashboard refresh within the same session.
      */
     fun dismissRecommendation(recommendation: RoutineCandidate) {
-        val key = "${recommendation.device_id}:${recommendation.action}"
+        val key = "${recommendation.device_id}:${recommendation.action}:${recommendation.value}"
         _dismissedKeys.value = _dismissedKeys.value + key
         _recommendations.value = _recommendations.value.filter { r ->
-            "${r.device_id}:${r.action}" != key
+            "${r.device_id}:${r.action}:${r.value}" != key
         }
     }
 
