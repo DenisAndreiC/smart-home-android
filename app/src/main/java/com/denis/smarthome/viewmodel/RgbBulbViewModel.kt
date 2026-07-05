@@ -6,10 +6,12 @@
  *
  * IMPORTANT: Becul RGB este non-smart, controlat prin telecomanda IR (NEC protocol).
  * Nu suporta culori hex arbitrare sau procente de luminozitate.
- * Comenzile disponibile corespund butoanelor fizice de pe telecomanda 44-key / 24-key:
- * - Culori fixe: red, green, blue, warm_white, cool_white
+ * Comenzile disponibile corespund butoanelor fizice de pe telecomanda 44-key / 24-key,
+ * dar etichetate in UI dupa efectul real observat (nu dupa eticheta originala):
+ * - Culori fixe: red, green, blue
+ * - Joc de lumini: warm_white (codul captureaza de fapt o ciclare de culori)
  * - Luminozitate: brightness_up, brightness_down (un pas pe apasare)
- * - Efecte: flash, fade (44-key si 24-key)
+ * - Efect Ice: flash (alb-albastru pulsat)
  *
  * Proiect: SmartHome IoT - Licenta CSIE-ASE 2025
  * Autor: Denis Andrei C.
@@ -50,13 +52,17 @@ data class IrColorButton(
  * Lista de culori disponibile pe telecomanda IR a becului RGB.
  * Aceste culori sunt comune atat telecomenzilor 44-key cat si 24-key.
  * Fiecare intrare mapeaza direct la o comanda IR acceptata de firmware-ul ESP32.
+ *
+ * NOTA: comenzile "warm_white" si "cool_white" nu declanseaza de fapt alb cald/rece pe
+ * becul fizic — codul capturat pe acest buton porneste un joc de lumini (color cycling).
+ * Etichetam butonul dupa efectul real ("Joc de lumini") si pastram un singur buton
+ * pentru acest efect (eliminam duplicatul "Cool White", care produce acelasi rezultat).
  */
 val rgbIrColors = listOf(
-    IrColorButton("Red",        Color(0xFFFF0000), "red"),
-    IrColorButton("Green",      Color(0xFF00FF00), "green"),
-    IrColorButton("Blue",       Color(0xFF0000FF), "blue"),
-    IrColorButton("Warm White", Color(0xFFFFD700), "warm_white"),
-    IrColorButton("Cool White", Color(0xFFE0E8FF), "cool_white")
+    IrColorButton("Red",           Color(0xFFFF0000), "red"),
+    IrColorButton("Green",         Color(0xFF00FF00), "green"),
+    IrColorButton("Blue",          Color(0xFF0000FF), "blue"),
+    IrColorButton("Joc de lumini", Color(0xFFFFD700), "warm_white")
 )
 
 /**
@@ -112,8 +118,13 @@ class RgbBulbViewModel(
             repository.getDevices()
                 .onSuccess { devices ->
                     _device.value = devices.find { it.id == deviceId }
-                    // Sincronizam starea locala cu starea reala din API
-                    _isOn.value = _device.value?.is_online ?: false
+                    // Becul IR e alimentat din acelasi circuit ca releele de lumina din casa:
+                    // daca orice releu e pornit, inseamna ca becul are alimentare si e considerat ON,
+                    // indiferent de is_online-ul propriu (care reflecta doar conectivitatea ESP32).
+                    val anyRelayOn = devices.any {
+                        it.device_type.lowercase() == "relay" && it.last_status?.lowercase() == "on"
+                    }
+                    _isOn.value = anyRelayOn || (_device.value?.is_online ?: false)
                 }
                 .onFailure { _error.value = it.message }
             _isLoading.value = false
@@ -156,17 +167,12 @@ class RgbBulbViewModel(
     }
 
     /**
-     * Trimite comanda IR pentru efect flash.
+     * Trimite comanda IR pentru modul "Ice" (alb-albastru pulsat).
+     * Foloseste codul IR de la butonul fizic "Flash" — cel de la "Fade" (albastru deschis
+     * static) a fost eliminat pentru a nu avea doua butoane pentru efecte similare.
      */
-    fun effectFlash() {
+    fun effectIce() {
         sendCommand("flash", "flash")
-    }
-
-    /**
-     * Trimite comanda IR pentru efect fade.
-     */
-    fun effectFade() {
-        sendCommand("fade", "fade")
     }
 
     /**

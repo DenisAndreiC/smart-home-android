@@ -3,7 +3,7 @@
  *
  * Afiseaza un cerc hero cu efect de glow care reflecta culoarea activa,
  * un card power cu switch, doua butoane de luminozitate (step up/down),
- * un grid cu butoanele de culori fixe ale telecomenzii IR si butoane pentru efecte.
+ * un grid cu butoanele de culori fixe ale telecomenzii IR si butonul pentru efectul Ice.
  *
  * NOTA: Becul RGB este non-smart, controlat prin telecomanda IR (NEC protocol).
  * Nu exista slider de luminozitate sau color picker continuu — doar comenzi discrete
@@ -55,7 +55,7 @@ import com.denis.smarthome.viewmodel.rgbIrColors
  * 2. Power card — switch on/off
  * 3. Brightness card — doua butoane ▲/▼ (step up/down, nu slider)
  * 4. Color grid — butoane pentru culorile fixe ale telecomenzii IR
- * 5. Effects — butoane Flash si Fade
+ * 5. Effects — buton Ice
  *
  * @param navController pentru navigare inapoi
  * @param device datele dispozitivului (nume si camera)
@@ -368,7 +368,7 @@ fun RgbBulbScreen(
                 }
 
                 // ── Effects ───────────────────────────────────────────────────
-                // Butoane pentru efectele disponibile pe telecomanda IR (Flash, Fade).
+                // Buton pentru modul Ice (efect alb-albastru pulsat de pe telecomanda IR).
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -380,63 +380,31 @@ fun RgbBulbScreen(
                         fontWeight = FontWeight.Bold
                     )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    // Ice effect button
+                    OutlinedButton(
+                        onClick = { viewModel.effectIce() },
+                        enabled = isOn,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isOn) Primary else Outline
+                        )
                     ) {
-                        // Flash effect button
-                        OutlinedButton(
-                            onClick = { viewModel.effectFlash() },
-                            enabled = isOn,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (isOn) Primary else Outline
-                            )
-                        ) {
-                            Icon(
-                                Icons.Default.FlashOn,
-                                contentDescription = null,
-                                tint = if (isOn) Primary else OnSurface.copy(alpha = 0.3f),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                "Flash",
-                                color = if (isOn) Primary else OnSurface.copy(alpha = 0.3f),
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-
-                        // Fade effect button
-                        OutlinedButton(
-                            onClick = { viewModel.effectFade() },
-                            enabled = isOn,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (isOn) Primary else Outline
-                            )
-                        ) {
-                            Icon(
-                                Icons.Default.Gradient,
-                                contentDescription = null,
-                                tint = if (isOn) Primary else OnSurface.copy(alpha = 0.3f),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                "Fade",
-                                color = if (isOn) Primary else OnSurface.copy(alpha = 0.3f),
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
+                        Icon(
+                            Icons.Default.AcUnit,
+                            contentDescription = null,
+                            tint = if (isOn) Primary else OnSurface.copy(alpha = 0.3f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            "Ice",
+                            color = if (isOn) Primary else OnSurface.copy(alpha = 0.3f),
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
 
